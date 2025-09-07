@@ -31,7 +31,7 @@ public class InputManager : NetworkBehaviour
     public void PlayerInitizalize()
     {
         if (!IsOwner) return;
-
+        Debug.Log("test");
         playerInput = new PlayerInput();
         onFoot = playerInput.OnFoot;
         motor = GetComponent<PlayerMotor>();
