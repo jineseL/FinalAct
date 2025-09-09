@@ -52,15 +52,15 @@ public class PlayerLook: NetworkBehaviour
         transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
         // Sync pitch for other clients
-        syncedPitch.Value = pitch;
+        //syncedPitch.Value = pitch;
     }
 
-    private void Update()
+    /*private void Update()
     {
         if (!IsOwner)
         {
             // Remote players: update their camera pivot to match their synced pitch
-            cameraPivot.localRotation = Quaternion.Euler(syncedPitch.Value, 0f, 0f);
+            cameraPivot.rotation = Quaternion.Euler(syncedPitch.Value, 0f, 0f);
         }
-    }
+    }*/
 }
