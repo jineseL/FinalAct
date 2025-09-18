@@ -1,38 +1,113 @@
 using UnityEngine;
 using UnityEngine.UI;
 using Unity.Netcode;
-using System.Collections;
+using Unity.Netcode.Transports.UTP;
+using System;
+
 public class LobbyUi : MonoBehaviour
 {
     [SerializeField] Button createGameButton;
     [SerializeField] Button joinGameButton;
     [SerializeField] Button backButton;
-    [SerializeField] GameObject MainMenuUiCanvas;
-    [SerializeField] GameObject ServerScript;
-    [SerializeField] GameObject ClientScript;
-    [SerializeField] GameObject HostUI;
+    [SerializeField] GameObject findingHostText;
+    [SerializeField] GameObject MainMenuUiCanvas; // first menu (for going back)
+    [SerializeField] GameObject ServerScript;      // prefab with LanBroadcastServer
+    [SerializeField] GameObject ClientScript;      // prefab with LanBroadcastClient
+    [SerializeField] GameObject HostUI;            // Multiplayer lobby UI
+    [SerializeField] GameObject lobbyPreviewManagerPrefab; //manager for spawning player preview
 
-    private void Awake()
+    [SerializeField] ushort gamePort = 7777;       // must match LanBroadcastServer.gamePort
+    GameObject container;                          // spawned holder (server/client script)
+    LanBroadcastServer serverRef;
+    LanBroadcastClient clientRef;
+
+    void Awake()
     {
         createGameButton.onClick.AddListener(() =>
         {
+            // Configure transport to listen on all interfaces (LAN) before hosting
+            var utp = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            utp.SetConnectionData("0.0.0.0", gamePort);
+
             NetworkManager.Singleton.StartHost();
-            Instantiate(ServerScript);
+
+            // Start broadcasting
+            container = Instantiate(ServerScript);
+            OnCreateLobby();
             AllButtonNonInteractable();
             AllButtonFadeAwayToMLobby();
+            MultiplayerLobbyUISetActive();
         });
+
         joinGameButton.onClick.AddListener(() =>
         {
-            Instantiate(ClientScript);
-            ClientScript.GetComponent<LanBroadcastClient>().JoinLobby();
+            // UI state
+            NGOButtonNonInteractable();
+            findingHostText.SetActive(true);
+
+            // Start listening; auto-connect on first host found
+            container = Instantiate(ClientScript);
+            var client = container.GetComponent<LanBroadcastClient>();
+            client.GameFound += OnHostFound;
+            client.JoinLobby();
         });
+
         backButton.onClick.AddListener(() =>
         {
             AllButtonNonInteractable();
             AllButtonFadeAway();
-            NetworkManager.Singleton.Shutdown();
-        });
 
+            // --- CLEANUP CLIENT (your snippet goes here) ---
+            if (clientRef != null)
+            {
+                clientRef.GameFound -= FindingHostTextSetUnactive;
+                clientRef.GameFound -= AllButtonNonInteractable;
+                clientRef.GameFound -= AllButtonFadeAwayToMLobby;
+                clientRef.StopListening();
+                clientRef = null;
+            }
+
+            // --- CLEANUP SERVER ---
+            if (serverRef != null)
+            {
+                serverRef.StopBroadcast();
+                serverRef = null;
+            }
+
+            // Destroy the helper container if it exists
+            if (container != null)
+            {
+                Destroy(container);
+                container = null;
+            }
+
+            // Shutdown NGO (works for host or client)
+            if (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer)
+                NetworkManager.Singleton.Shutdown();
+
+            // Return to previous menu
+            findingHostText.SetActive(false);
+            HostUI.SetActive(false);
+            MainMenuUiCanvas.SetActive(true);
+            AllButtonInteractable();
+        });
+    }
+
+    void OnHostFound()
+    {
+        // This runs on main thread (from client script Update)
+        findingHostText.SetActive(false);
+        AllButtonNonInteractable();
+        AllButtonFadeAwayToMLobby();
+        MultiplayerLobbyUISetActive();
+    }
+    public void OnCreateLobby()
+    {
+       
+
+        // Spawn the networked controller so it can send RPCs
+        var go = Instantiate(lobbyPreviewManagerPrefab);
+        go.GetComponent<NetworkObject>().Spawn();
     }
 
     //helper functions for non networking
@@ -56,6 +131,12 @@ public class LobbyUi : MonoBehaviour
         createGameButton.interactable = false;
         joinGameButton.interactable = false;
         backButton.interactable = false;
+        FindingHostTextSetUnactive();
+    }
+    public void NGOButtonNonInteractable()
+    {
+        createGameButton.interactable = false;
+        joinGameButton.interactable = false;
     }
     public void AllButtonFadeAway()
     {
@@ -68,6 +149,11 @@ public class LobbyUi : MonoBehaviour
     public void SetUnactive()
     {
         gameObject.SetActive(false);
+    }
+
+    public void FindingHostTextSetUnactive()
+    {
+        findingHostText.SetActive(false);
     }
     #endregion Non NGO Functions
 

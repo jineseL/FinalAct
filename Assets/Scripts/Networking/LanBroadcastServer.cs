@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System;
 using UnityEngine;
 using Unity.Netcode;
 using UnityEngine.UI;
@@ -78,11 +79,23 @@ public class LanBroadcastServer : MonoBehaviour
 
     public void StopBroadcast()
     {
-        cts?.Cancel();
-        udpServer?.Close();
-        udpServer?.Dispose();
-        udpServer = null;
-        cts = null;
+        try
+        {
+            cts?.Cancel();
+            cts?.Dispose();
+            cts = null;
+
+            if (udpServer != null)
+            {
+                udpServer.Close();
+                udpServer.Dispose(); // <-- Important for native cleanup
+                udpServer = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"StopBroadcast error: {ex.Message}");
+        }
     }
 
     private void OnDestroy()
