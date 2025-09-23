@@ -5,7 +5,6 @@ public class PlayerWeaponManager : NetworkBehaviour
 {
     [Header("Weapons")]
     public GameObject[] fpsWeapons;
-    public GameObject[] worldWeapons;
     public Weapons[] weapons;
 
     [Header("Interaction")]
@@ -18,14 +17,8 @@ public class PlayerWeaponManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        if (IsOwner)
-        {
-            foreach (var w in worldWeapons) w.SetActive(false);
-        }
-        else
-        {
-            foreach (var w in fpsWeapons) w.SetActive(false);
-        }
+         foreach (var w in fpsWeapons) w.SetActive(false);
+        
     }
 
     private void Update()
@@ -105,21 +98,13 @@ public class PlayerWeaponManager : NetworkBehaviour
         if (currentWeaponIndex == index) return;
 
         foreach (var w in fpsWeapons) w.SetActive(false);
-        foreach (var w in worldWeapons) w.SetActive(false);
 
         currentWeaponIndex = index;
         currentWeapon = weapons[index]; //weapons script
-        currentWeapon.EquipWeapon(GetComponent<PlayerManager>(), fpsWeapons[index], worldWeapons[index]);
-
-        if (IsOwner)
-        {
-            fpsWeapons[index].SetActive(true);
+        currentWeapon.EquipWeapon(GetComponent<PlayerManager>(), fpsWeapons[index]);
+        fpsWeapons[index].SetActive(true);
             
-        }
-        else
-        {
-            worldWeapons[index].SetActive(true);
-        }
+        
     }
 
     public void TryFire() {

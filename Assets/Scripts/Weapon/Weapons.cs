@@ -12,15 +12,12 @@ public class Weapons :NetworkBehaviour
     public PlayerManager owner {private set; get; }
 
     public GameObject fpsGun;
-    public GameObject worldGun;
     public Animator fpsAnimator;
-    public Animator worldAnimator;
-    public void EquipWeapon(PlayerManager player, GameObject fpsView, GameObject worldView )
+    public void EquipWeapon(PlayerManager player, GameObject fpsView)
     {
         owner = player;
         //owner.gameObject.GetComponent<PlayerWeaponManager>().EquipWeaponServerRpc(weaponIndex);
         fpsGun = fpsView;
-        worldGun = worldView;
         currentAmmoCount = maxAmmo;
     }
     public void ResetAttacking()

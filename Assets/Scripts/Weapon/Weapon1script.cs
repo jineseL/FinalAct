@@ -25,8 +25,6 @@ public class Weapon1script : Weapons
 
         isAttacking = true;
 
-        //WorldFire();
-
         FpsFire();
 
     }
