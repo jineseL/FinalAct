@@ -31,7 +31,6 @@ public class GameManager1:NetworkBehaviour
     [Rpc(SendTo.Server)]
     public void SpawnPlayerServerRpc(ulong requestingClientId)
     {
-        Debug.Log("test");
         // Decide spawn point
         Vector3 spawnPos = (requestingClientId == 0)
             ? hostPositionSpawn.position

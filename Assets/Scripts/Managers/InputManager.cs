@@ -10,6 +10,7 @@ public class InputManager : NetworkBehaviour
 
     private PlayerMotor motor;
     private PlayerLook look;
+    private PlayerWeaponManager weaponManager;
     /*private void Awake()
     {
         //if (!IsOwner) return;
@@ -31,12 +32,16 @@ public class InputManager : NetworkBehaviour
     public void PlayerInitizalize()
     {
         if (!IsOwner) return;
-        Debug.Log("test");
         playerInput = new PlayerInput();
         onFoot = playerInput.OnFoot;
         motor = GetComponent<PlayerMotor>();
         look = GetComponent<PlayerLook>();
+        weaponManager = GetComponent<PlayerWeaponManager>();
         onFoot.Jump.performed += ctx => motor.Jump();
+        onFoot.Dash.performed += ctx => motor.Dash();
+        onFoot.Fire.performed += ctx => weaponManager.TryFire();
+        onFoot.Reload.performed += ctx => weaponManager.TryReload();
+        onFoot.Interact.performed += ctx => weaponManager.TryInteract();
         onFoot.Enable();
     }
     private void FixedUpdate()
