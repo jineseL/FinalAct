@@ -5,7 +5,7 @@ public class WeaponPickup : NetworkBehaviour, IInteractable
     public int weaponIndex;
     public string weaponName;
 
-    public void Interact(GameObject interactor)
+    /*public void Interact(GameObject interactor)
     {
         if (!interactor.TryGetComponent<PlayerWeaponManager>(out var pwm)) return;
 
@@ -13,6 +13,15 @@ public class WeaponPickup : NetworkBehaviour, IInteractable
         if (pwm.IsOwner) // only the owning client sends the request
         {
             pwm.EquipWeaponServerRpc(weaponIndex);
+        }
+    }*/
+    public void Interact(GameObject interactor)
+    {
+        var weaponManager = interactor.GetComponent<PlayerWeaponManager>();
+        if (weaponManager != null)
+        {
+            // server tells all clients to equip weapon
+            weaponManager.EquipWeaponServerRpc(weaponIndex);
         }
     }
 

@@ -1,6 +1,6 @@
 using UnityEngine;
 using Unity.Netcode;
-public class Weapons :NetworkBehaviour
+public class Weapons : NetworkBehaviour
 {
     public string weaponName;
     public float damage;
@@ -9,33 +9,41 @@ public class Weapons :NetworkBehaviour
     public bool isReloading;
     public int weaponIndex; // on the player
     public int currentAmmoCount;
-    public PlayerManager owner {private set; get; }
+    public PlayerManager owner { private set; get; }
 
     public GameObject fpsGun;
     public Animator fpsAnimator;
+
     public void EquipWeapon(PlayerManager player, GameObject fpsView)
     {
         owner = player;
-        //owner.gameObject.GetComponent<PlayerWeaponManager>().EquipWeaponServerRpc(weaponIndex);
         fpsGun = fpsView;
         currentAmmoCount = maxAmmo;
     }
-    public void ResetAttacking()
+
+    public void ResetAttacking() { isAttacking = false; }
+
+    public void ResetReloading() { isReloading = false; }
+
+    public virtual void Fire() { }
+    public virtual void Reload() { }
+
+    /// <summary>
+    /// Animation Event: called at the moment ammo should refill.
+    /// </summary>
+    public virtual void AE_ReloadCommit()
     {
-        isAttacking = false;
-    }
-    public void ResetReloading()
-    {
-        isReloading = false;
-    }
-    public virtual void Fire()
-    {
-        
+       
     }
 
-    public virtual void Reload()
+    /// <summary>
+    /// Animation Event: called at the end of reload anim.
+    /// </summary>
+    public virtual void AE_ReloadFinished()
     {
-        
     }
 
+    // NEW: lets animation event trigger auto-reload logic per weapon
+    public virtual void TryAutoReloadAfterShot() { }
 }
+

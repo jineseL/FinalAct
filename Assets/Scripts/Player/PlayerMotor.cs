@@ -6,9 +6,12 @@ public class PlayerMotor : MonoBehaviour
     private CharacterController controller;
     Vector3 playerVelocity;
     bool isGrounded;
-    public float speed = 5f;
+
+    [Header("Move")]
+    public float speed = 5f;                 // base speed
     public float gravity = -9.8f;
     public float jumpHeight = 1.5f;
+    public float maxExternalSpeed = 50f;     // for external force (knockback/pull)
 
     [Header("Dash Settings")]
     public float dashSpeed = 20f;
@@ -25,64 +28,128 @@ public class PlayerMotor : MonoBehaviour
     public int maxJumps = 2;   // number of jumps allowed (2 = double jump)
     private int jumpCount = 0; // how many jumps have been used
 
+    [Header("External Force Lock")]
+    [SerializeField] private bool blockNewExternalForces = false; // inspector toggle
+    private float externalForceLockUntil = 0f;
     private Vector3 externalForce;
+    [SerializeField] private float persistentAccel = 30f;   // how fast we can change persistentVel (units/s^2)
+    [SerializeField] private float persistentMaxSpeed = 15f;// cap for persistentVel
+
+    private Vector3 persistentVel;       // current persistent velocity (e.g., blackhole)
+    private Vector3 persistentTargetVel; // desired persistent velocity set by effects each frame
+    public bool IsExternalForceLocked => blockNewExternalForces && Time.time < externalForceLockUntil;
+
+    // ===== Slow =====
+    // current slow multiplier (1 = normal speed, 0.6 = 40% slow)
+    private float moveFactor = 1f;
+    private float slowUntil = 0f;
+
     private void Start()
     {
         controller = GetComponent<CharacterController>();
     }
+
     private void Update()
     {
         isGrounded = controller.isGrounded;
         if (isGrounded && playerVelocity.y < 0)
         {
             playerVelocity.y = -2f;
-            jumpCount = 0; // to reset jump count
+            jumpCount = 0; // reset jump count
         }
+
+        if (blockNewExternalForces && Time.time >= externalForceLockUntil) blockNewExternalForces = false;
+
         if (isDashing)
         {
             DashMovement();
         }
+
+        // expire slow
+        if (Time.time >= slowUntil && moveFactor != 1f)
+            moveFactor = 1f;
     }
-    public void ApplyExternalForce(Vector3 force)
+
+    public void ApplyExternalForce(Vector3 forceVelocity)
     {
-        externalForce = force;
+        // Ignore new external forces while locked
+        if (IsExternalForceLocked) return;
+
+        externalForce = Vector3.ClampMagnitude(externalForce + forceVelocity, maxExternalSpeed);
     }
+
+    // use this if you ever need to override the lock for a special case
+    public void ApplyExternalForceOverride(Vector3 forceVelocity)
+    {
+        externalForce = Vector3.ClampMagnitude(externalForce + forceVelocity, maxExternalSpeed);
+    }
+    public void LockExternalForces(float duration)
+    {
+        blockNewExternalForces = true;
+        externalForceLockUntil = Mathf.Max(externalForceLockUntil, Time.time + Mathf.Max(0f, duration));
+    }
+
+    public void UnlockExternalForces()
+    {
+        blockNewExternalForces = false;
+        externalForceLockUntil = 0f;
+    }
+    public void SetPersistentExternalVelocity(Vector3 desiredVel)
+    {
+        if (IsExternalForceLocked) return; // respect knockback lock
+        persistentTargetVel = Vector3.ClampMagnitude(desiredVel, persistentMaxSpeed);
+    }
+
+    // Call to stop pulling
+    public void ClearPersistentExternalVelocity()
+    {
+        // do not snap, just set the target to zero; it will ease back using persistentAccel
+        persistentTargetVel = Vector3.zero;
+    }
+
     public void ProcessMove(Vector2 input)
     {
         if (isDashing) return;
 
         lastInput = input;
 
+        // Normal input movement (local space)
         Vector3 moveDirection = new Vector3(input.x, 0, input.y);
         moveDirection = transform.TransformDirection(moveDirection);
 
-        // Player movement
-        controller.Move(moveDirection * speed * Time.deltaTime);
+        // Apply slow via moveFactor
+        float appliedSpeed = speed * moveFactor;
+        controller.Move(moveDirection * appliedSpeed * Time.deltaTime);
 
         // Gravity
         playerVelocity.y += gravity * Time.deltaTime;
         if (isGrounded && playerVelocity.y < 0)
             playerVelocity.y = -2f;
 
-        // Apply vertical + knockback
-        Vector3 finalMove = playerVelocity + externalForce;
+        // Ease persistentVel toward the current target
+        persistentVel = Vector3.MoveTowards(
+            persistentVel,
+            persistentTargetVel,
+            persistentAccel * Time.deltaTime
+        );
+
+        // External recoil/pull velocity + vertical velocity
+        Vector3 finalMove = playerVelocity + externalForce + persistentVel;
         controller.Move(finalMove * Time.deltaTime);
 
-        // Decay knockback over time
-        externalForce = Vector3.Lerp(externalForce, Vector3.zero, 5f * Time.deltaTime);
+        // Decay external velocity smoothly; lower value = longer push
+        externalForce = Vector3.Lerp(externalForce, Vector3.zero, 4f * Time.deltaTime);
     }
+
     public void Jump()
     {
-        /*if (isGrounded)
-        {
-            playerVelocity.y = Mathf.Sqrt(jumpHeight * -3.0f * gravity);
-        }*/
         if (jumpCount < maxJumps)
         {
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -3.0f * gravity);
             jumpCount++;
         }
     }
+
     public void Dash()
     {
         if (Time.time < lastDashTime + dashCooldown || isDashing)
@@ -98,7 +165,6 @@ public class PlayerMotor : MonoBehaviour
         dashTimer = dashDuration;
         lastDashTime = Time.time;
 
-        //todo
         TriggerDashVFX();
     }
 
@@ -106,6 +172,7 @@ public class PlayerMotor : MonoBehaviour
     {
         if (dashTimer > 0f)
         {
+            // Dash speed ignores slow by design; change to (dashSpeed * moveFactor) if you want slow to affect dash
             controller.Move(dashDirection * dashSpeed * Time.deltaTime);
             dashTimer -= Time.deltaTime;
         }
@@ -114,9 +181,33 @@ public class PlayerMotor : MonoBehaviour
             isDashing = false;
         }
     }
+
     private void TriggerDashVFX()
     {
-        //todo dash effect
+        // todo dash effect
     }
 
+    // ===== New: Slow API =====
+    /// <summary>
+    /// Apply a movement slow. factor in [0..1], e.g. 0.6 = 40% slow.
+    /// duration refreshes the slow timer; strongest slow wins.
+    /// </summary>
+    public void ApplySlow(float factor, float duration)
+    {
+        factor = Mathf.Clamp01(factor);
+        // keep the stronger slow (smaller factor)
+        moveFactor = Mathf.Min(moveFactor, factor);
+        // extend the slow if this one lasts longer
+        slowUntil = Mathf.Max(slowUntil, Time.time + Mathf.Max(0f, duration));
+    }
+
+    /// <summary>
+    /// Clears any active slows immediately.
+    /// </summary>
+    public void ClearSlow()
+    {
+        moveFactor = 1f;
+        slowUntil = 0f;
+    }
 }
+

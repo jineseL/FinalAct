@@ -1,7 +1,10 @@
 using UnityEngine;
+using Unity.Netcode;
+using UnityEngine.SceneManagement;
 using System.Collections;
 
 public enum GameMode { Singleplayer, Multiplayer }
+
 public class GameModeManager : MonoBehaviour
 {
     public GameObject fadeOutCanvas;
@@ -24,36 +27,67 @@ public class GameModeManager : MonoBehaviour
     {
         CurrentMode = mode;
     }
+
     public void StartSingleplayer()
     {
         CurrentMode = GameMode.Singleplayer;
-        GameObject fadeObj = Instantiate(fadeOutCanvas);
 
-        fadeObj.GetComponent<FadeOutCanvas>().StartCoroutine(fadeObj.GetComponent<FadeOutCanvas>().FadeAndLoad(Loader.Scene.RestScene));
-    }
-
-    /*private IEnumerator FadeAndLoad()
-    {
-        // 1. Instantiate fade canvas
-        GameObject fadeObj = Instantiate(fadeOutCanvas);
-
-        // 2. Get Animator
-        Animator anim = fadeObj.GetComponent<Animator>();
-        if (anim == null)
+        var nm = NetworkManager.Singleton;
+        if (nm == null)
         {
-            Debug.LogError("FadeOutCanvas has no Animator!");
-            yield break;
+            Debug.LogError("[GameModeManager] NetworkManager not found in scene.");
+            return;
         }
 
-        // 3. Wait for the fade animation to finish
-        // Assuming your fade animation is the default state on layer 0
-        AnimatorStateInfo stateInfo = anim.GetCurrentAnimatorStateInfo(0);
-        float animLength = stateInfo.length;
+        // Start host if not already
+        if (!nm.IsServer && !nm.IsClient)
+        {
+            if (!nm.StartHost())
+            {
+                Debug.LogError("[GameModeManager] Failed to StartHost().");
+                return;
+            }
+        }
 
-        yield return new WaitForSeconds(animLength);
+        // Do a fade, then network-load the target scene as the server
+        StartCoroutine(FadeThenNetworkLoad(Loader.Scene.RestScene));
+    }
 
-        // 4. Load target scene after fade
-        Loader.Load(Loader.Scene.RestScene);
-    }*/
+    private IEnumerator FadeThenNetworkLoad(Loader.Scene targetScene)
+    {
+        // Spawn fade canvas
+        GameObject fadeObj = null;
+        Animator anim = null;
 
+        if (fadeOutCanvas != null)
+        {
+            fadeObj = Instantiate(fadeOutCanvas);
+            anim = fadeObj.GetComponent<Animator>();
+        }
+
+        // Wait for the fade anim length if present, else a small fallback delay
+        float wait = 0.35f;
+        if (anim != null)
+        {
+            // If your fade uses a specific state, you can query that state’s length
+            var st = anim.GetCurrentAnimatorStateInfo(0);
+            if (st.length > 0.01f) wait = st.length;
+        }
+        yield return new WaitForSeconds(wait);
+
+        // Server/host performs the network scene load so all netobjs spawn correctly
+        var nm = NetworkManager.Singleton;
+        if (nm != null && nm.IsServer)
+        {
+            nm.SceneManager.LoadScene(targetScene.ToString(), LoadSceneMode.Single);
+        }
+        else
+        {
+            Debug.LogWarning("[GameModeManager] Not server; cannot network-load scene.");
+            // Fallback (not recommended for NGO): SceneManager.LoadScene(targetScene.ToString());
+        }
+
+        // Optional: destroy fade after a moment
+        // if (fadeObj) Destroy(fadeObj, 1f);
+    }
 }

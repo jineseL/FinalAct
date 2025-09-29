@@ -10,6 +10,7 @@ public static class Loader
         RestScene, //rest room
         LobbyScene, //main menu
         LoadingScene, //loading screen
+        ArenaScene,
     }
 
     private static Scene targetScene;

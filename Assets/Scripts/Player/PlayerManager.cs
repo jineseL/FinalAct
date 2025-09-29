@@ -18,7 +18,7 @@ public class PlayerManager : NetworkBehaviour
 
         if ((playerHealth = GetComponent<PlayerHealth>()) is not null)
         {
-            playerHealth.initializedPlayerHealth();
+            playerHealth.InitializePlayerHealth();
         }
         else Debug.Log("player health missing");
     }

@@ -1,11 +1,14 @@
 using UnityEngine;
 using Unity.Netcode;
-
+using Unity.Cinemachine;
 public class PlayerLook: NetworkBehaviour
 {
     [Header("References")]
-    [SerializeField] private Transform cameraPivot;   // Empty object at head height
+    [SerializeField] private GameObject cameraPivot;   // Empty object at head height
     [SerializeField] private GameObject playerCamera;     // Child camera
+    [SerializeField] private CinemachineCamera playerCmCam; // assign PlayerCamera GO
+    public CinemachineCamera PlayerCam => playerCmCam;
+    [SerializeField] private AudioListener audioListener;
 
     [Header("Settings")]
     public float xSensitivity = 30f;
@@ -31,8 +34,14 @@ public class PlayerLook: NetworkBehaviour
                 if (listener) listener.enabled = false;
             }
         }
+        // Local owner: lock cursor for FPS
+        SetFpsCursor(true);
     }
-
+    public override void OnNetworkDespawn()
+    {
+        if (IsOwner)
+            SetFpsCursor(false);
+    }
     /// <summary>
     /// Called by InputManager.LateUpdate for the local player
     /// </summary>
@@ -45,8 +54,8 @@ public class PlayerLook: NetworkBehaviour
 
         // Pitch (look up/down)
         pitch = Mathf.Clamp(pitch - mouseY, -80f, 80f);
-        playerCamera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
-
+        cameraPivot.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+        //cameraPivot.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
         // Yaw (look left/right, rotates the body)
         yaw += mouseX;
         transform.rotation = Quaternion.Euler(0f, yaw, 0f);
@@ -54,13 +63,15 @@ public class PlayerLook: NetworkBehaviour
         // Sync pitch for other clients
         //syncedPitch.Value = pitch;
     }
-
-    /*private void Update()
+    public void SetCameraActive(bool on)
     {
-        if (!IsOwner)
-        {
-            // Remote players: update their camera pivot to match their synced pitch
-            cameraPivot.rotation = Quaternion.Euler(syncedPitch.Value, 0f, 0f);
-        }
-    }*/
+        if (playerCamera) playerCamera.SetActive(on);
+        if (playerCmCam) playerCmCam.enabled = on;               // useless but safer
+        if (audioListener) audioListener.enabled = on;
+    }
+    public void SetFpsCursor(bool locked)
+    {
+        Cursor.lockState = locked ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !locked;
+    }
 }

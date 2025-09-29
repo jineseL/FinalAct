@@ -1,0 +1,150 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &2538445292670875719
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.070000015
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.07000004
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.07000002
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -4.81
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.18
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 2.98
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.99901724
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.012099355
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.038295116
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.018753622
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_ConstrainProportionsScale
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      propertyPath: m_Name
+      value: DoubleBarrelGunWorld
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5060327576175599927}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7373697939441293097}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5797707287692922351}
+  m_SourcePrefab: {fileID: 100100000, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+--- !u!1 &3457418001767580950 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: acb27a8b9ea355348b7e41fd5e031bbd, type: 3}
+  m_PrefabInstance: {fileID: 2538445292670875719}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &5060327576175599927
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3457418001767580950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 2137786207
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 0
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
+--- !u!114 &7373697939441293097
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3457418001767580950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 60f2c57b644cef846a0fc1eff3497582, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponPickup
+  ShowTopMostFoldoutHeaderGroup: 1
+  weaponIndex: 0
+  weaponName: DoubleBarrel
+--- !u!65 &5797707287692922351
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3457418001767580950}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 5.5004234, y: 5.8486943, z: 9.421588}
+  m_Center: {x: -0.25834137, y: 0.9841539, z: 0.86464554}
