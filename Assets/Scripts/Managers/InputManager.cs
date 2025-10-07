@@ -15,7 +15,7 @@ public class InputManager : NetworkBehaviour
     private PlayerMotor motor;
     private PlayerLook look;
     private PlayerWeaponManager weaponManager;
-    private bool isQuitting = false;
+    //private bool isQuitting = false;
     /*private void Awake()
     {
         //if (!IsOwner) return;
@@ -47,7 +47,8 @@ public class InputManager : NetworkBehaviour
         onFoot.Fire.performed += ctx => weaponManager.TryFire();
         onFoot.Reload.performed += ctx => weaponManager.TryReload();
         onFoot.Interact.performed += ctx => weaponManager.TryInteract();
-        onFoot.Esc.performed += ctx => QuitGame();
+        onFoot.Interact.canceled += ctx => weaponManager.TryInteractCancel();
+        onFoot.Esc.performed += ctx => AppQuit.Quit();
         onFoot.Enable();
     }
     private void FixedUpdate()
@@ -73,7 +74,7 @@ public class InputManager : NetworkBehaviour
         if (IsOwner)
             onFoot.Disable();
     }
-    private void QuitGame()
+    /*private void QuitGame() //todo fix this shit
     {
         if (!IsOwner || isQuitting) return;
         isQuitting = true;
@@ -83,21 +84,22 @@ public class InputManager : NetworkBehaviour
     private IEnumerator QuitRoutine()
     {
         // Gracefully stop Netcode (both host and client)
+
         var nm = NetworkManager.Singleton;
         if (nm != null && nm.IsListening)
         {
             nm.Shutdown();
             // give a frame or two for shutdown events to process
             yield return null;
-            yield return null;
         }
 
         // In-editor vs build
 #if UNITY_EDITOR
         //EditorApplication.isPlaying = false;
+        Debug.Log("test");
         UnityEditor.EditorApplication.ExitPlaymode();
 #else
         Application.Quit();
 #endif
-    }
+    }*/
 }

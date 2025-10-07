@@ -29,7 +29,7 @@ public class PlutoUtilityAi : MonoBehaviour
     {
         var ctx = new BossContext
         {
-            Boss = boss,
+            //Boss = boss,
             TimeNow = Time.time,
             BossPos = boss.core ? boss.core.position : boss.transform.position
         };

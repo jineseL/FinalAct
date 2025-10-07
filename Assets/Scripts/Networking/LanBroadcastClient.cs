@@ -12,24 +12,49 @@ public class LanBroadcastClient : MonoBehaviour
     public int broadcastPort = 47777; // must match server
     private UdpClient udpClient;
     private Thread listenThread;
-    private bool listening;
+    private volatile bool listening;
 
     public Action GameFound;
 
-    // Main-thread handoff
+    // main-thread handoff
     private volatile bool hostFoundFlag;
     private string foundIp;
     private int foundPort;
 
     public void JoinLobby()
     {
+        // Don’t listen if we’re the host/server in this instance
+        if (NetworkManager.Singleton && (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsHost))
+        {
+            Debug.Log("[LanBroadcastClient] Skipping listen; this instance is host/server.");
+            return;
+        }
+
         if (listening) return;
 
-        udpClient = new UdpClient(broadcastPort) { EnableBroadcast = true };
-        listening = true;
+        try
+        {
+            // Allow multiple processes on same machine to bind this port
+            udpClient = new UdpClient(AddressFamily.InterNetwork);
+            udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            // On Windows, avoid exclusive bind
+            udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ExclusiveAddressUse, false);
+#endif
+            udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, broadcastPort));
+            udpClient.EnableBroadcast = true;
 
-        listenThread = new Thread(ListenLoop) { IsBackground = true };
-        listenThread.Start();
+            listening = true;
+            listenThread = new Thread(ListenLoop) { IsBackground = true };
+            listenThread.Start();
+
+            Debug.Log($"[LanBroadcastClient] Listening for broadcasts on {broadcastPort}");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[LanBroadcastClient] Failed to bind port {broadcastPort}: {ex.Message}");
+            StopListening();
+        }
     }
 
     private void ListenLoop()
@@ -45,12 +70,16 @@ public class LanBroadcastClient : MonoBehaviour
 
                 if (message.StartsWith("GameLobby:"))
                 {
-                    // Capture results for main thread
-                    foundPort = int.Parse(message.Split(':')[1]);
-                    foundIp = endPoint.Address.ToString();
-                    hostFoundFlag = true;
+                    // parse port
+                    var parts = message.Split(':');
+                    if (parts.Length >= 2 && int.TryParse(parts[1], out var port))
+                    {
+                        foundPort = port;
+                        foundIp = endPoint.Address.ToString();
+                        hostFoundFlag = true;
+                    }
 
-                    // Stop listening
+                    // done listening for now
                     listening = false;
                     udpClient.Close();
                     udpClient = null;
@@ -66,12 +95,11 @@ public class LanBroadcastClient : MonoBehaviour
 
     private void Update()
     {
-        // Main thread: safe to touch Unity/NGO
         if (hostFoundFlag)
         {
             hostFoundFlag = false;
             ConnectToHost(foundIp, foundPort);
-            GameFound?.Invoke(); // Safe now (main thread)
+            GameFound?.Invoke();
             foundIp = null;
         }
     }
@@ -79,26 +107,26 @@ public class LanBroadcastClient : MonoBehaviour
     private void ConnectToHost(string ip, int port)
     {
         var nm = NetworkManager.Singleton;
+        if (!nm) return;
         var transport = nm.GetComponent<UnityTransport>();
         transport.SetConnectionData(ip, (ushort)port);
+        Debug.Log($"[LanBroadcastClient] Connecting to {ip}:{port}");
         nm.StartClient();
     }
+
     public void StopListening()
     {
-        // Signal the thread to exit its while loop
         listening = false;
 
-        // Close & dispose the socket (will unblock Receive)
         try { udpClient?.Close(); } catch { }
         try { udpClient?.Dispose(); } catch { }
         udpClient = null;
 
-        // Wait for the thread to finish instead of Abort() (avoids TLS allocator warnings)
         if (listenThread != null)
         {
             if (listenThread.IsAlive)
             {
-                try { listenThread.Join(100); } catch { /* ignore */ }
+                try { listenThread.Join(100); } catch { }
             }
             listenThread = null;
         }
@@ -107,20 +135,5 @@ public class LanBroadcastClient : MonoBehaviour
     private void OnDestroy()
     {
         StopListening();
-        // If you subscribed handlers somewhere, also unsubscribe:
-        // GameFound = null;  // optional
     }
-    /*private void OnDestroy()
-    {
-        listening = false;
-
-        try { udpClient?.Close(); } catch { }
-        udpClient = null;
-
-        if (listenThread != null && listenThread.IsAlive)
-        {
-            // Graceful end instead of Abort (avoids TLS allocator warnings)
-            listenThread.Join();
-        }
-    }*/
 }

@@ -9,7 +9,7 @@ public class PlayerManager : NetworkBehaviour
     [SerializeField] List<GameObject> ToDisableForNonOwner = new List<GameObject>();
 
     PlayerHealth playerHealth;
-    
+    public Animator fpsAnimator;
 
     public override void OnNetworkSpawn()
     {

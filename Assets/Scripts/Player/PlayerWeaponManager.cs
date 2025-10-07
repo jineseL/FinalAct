@@ -11,7 +11,7 @@ public class PlayerWeaponManager : NetworkBehaviour
     [SerializeField] private GameObject playerCamera;
     [SerializeField] private float interactRange = 4f;
 
-    private int currentWeaponIndex = -1;
+    public int currentWeaponIndex = -1;
     public Weapons currentWeapon;
     private IInteractable currentInteractable;
 
@@ -88,7 +88,7 @@ public class PlayerWeaponManager : NetworkBehaviour
     {
         if (targetRef.TryGet(out NetworkBehaviour target) && target is IInteractable interactable)
         {
-            var interactor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject.gameObject;
+            GameObject interactor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject.gameObject;
             interactable.Interact(interactor);
         }
     }
@@ -113,6 +113,12 @@ public class PlayerWeaponManager : NetworkBehaviour
     {
         SetWeaponActive(newIndex);
     }
+    /*public void ServerForceEquip(int index)
+    {
+        if (!IsServer) return;
+        if (weapons == null || index < 0 || index >= weapons.Length) return;
+        equippedIndex.Value = index; // will replicate to all and call SetWeaponActive via OnValueChanged
+    }*/
 
     private void SetWeaponActive(int index)
     {
@@ -136,6 +142,15 @@ public class PlayerWeaponManager : NetworkBehaviour
 
     public void TryFire() { if (currentWeapon != null) currentWeapon.Fire(); }
     public void TryReload() { if (currentWeapon != null) currentWeapon.Reload(); }
+    public void TryInteractCancel()
+    {
+        if (!IsOwner) return;
+        if (currentInteractable is DownedRevive dr)
+        {
+            // Tell server to cancel the current revive attempt
+            dr.CancelReviveServerRpc();
+        }
+    }
 }
 
 

@@ -24,6 +24,27 @@ public class PlayerHealth : NetworkBehaviour
     public bool IsAlive => currentHealth.Value > 0;
 
     // Call from your PlayerManager.OnNetworkSpawn()
+    [Header("Downed/Revive")]
+    [SerializeField] private float downedBleedoutTime = 10f; // seconds allowed to revive
+    [SerializeField] private float reviveTime = 3f;          // hold E duration
+    [SerializeField] private float reviveHpPct = 0.5f;       // 50% HP when revived
+    [SerializeField] private float fakeDeathHpPct = 0.25f;   // 25% HP when no revive
+
+    // everyone reads, server writes
+    private NetworkVariable<bool> isDownedNV = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    private NetworkVariable<float> reviveProgressNV = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    public bool IsDowned => isDownedNV.Value;
+    public float ReviveProgress01 => reviveProgressNV.Value;
+
+    // server-only runtime
+    private Coroutine bleedoutRoutine;
+    private Coroutine reviveRoutine;
+
+    [SerializeField] GameObject DieText;
     public void InitializePlayerHealth()
     {
         WireCallbacks();
@@ -35,11 +56,16 @@ public class PlayerHealth : NetworkBehaviour
         WireCallbacks();
         if (IsServer && currentHealth.Value <= 0) // fresh spawn
             currentHealth.Value = maxHealth;
+
+        isDownedNV.OnValueChanged += OnDownedChanged;
+        reviveProgressNV.OnValueChanged += OnReviveProgressChanged;
     }
 
     public override void OnNetworkDespawn()
     {
         UnwireCallbacks();
+        isDownedNV.OnValueChanged -= OnDownedChanged;
+        reviveProgressNV.OnValueChanged -= OnReviveProgressChanged;
     }
 
     private void WireCallbacks()
@@ -52,7 +78,30 @@ public class PlayerHealth : NetworkBehaviour
     {
         currentHealth.OnValueChanged -= OnHealthChanged;
     }
+    private void OnDownedChanged(bool oldV, bool newV)
+    {
+        // Toggle local presentation for the owner
+        if (IsOwner)
+            SetDownedPresentation(newV);
+    }
+    private void OnReviveProgressChanged(float oldV, float newV)
+    {
+        // Optional: owner or reviver HUD can observe this NetworkVariable to show a bar
+    }
 
+    private void SetDownedPresentation(bool down)
+    {
+        // Disable owner input + show red overlay
+        var input = GetComponentInChildren<InputManager>(true);
+        if (input) input.enabled = !down;
+
+        // Freeze movement a bit more if you want:
+        var motor = GetComponent<PlayerMotor>();
+        if (motor) motor.ClearSlow(); // optional
+        // Red overlay (if you have a HUD)
+        var hud = GetComponentInChildren<PlayerHUD>(true);
+        if (hud) hud.SetDownedOverlay(down); // implement SetDownedOverlay(bool) in your HUD
+    }
     private void OnHealthChanged(int oldValue, int newValue)
     {
         if (newValue <= 0)
@@ -247,9 +296,144 @@ public class PlayerHealth : NetworkBehaviour
 
     private void Die()
     {
-        if (IsServer)
+        if (!IsServer) return;
+
+        // If already downed (double kill), just fake-death immediately
+        if (IsDowned)
         {
-            // server-driven death handling
+            ServerFakeRespawn(fakeDeathHpPct);
+            DieText.SetActive(true);
+            return;
         }
+
+        // Coop? If 2 players are in game, enter downed. Else solo: fake-death.
+        bool hasTeammate = NetworkManager.Singleton != null && NetworkManager.Singleton.ConnectedClients.Count >= 2;
+        if (hasTeammate)
+        {
+            EnterDowned();
+            DieText.SetActive(true);
+        }
+        else
+        {
+            ServerFakeRespawn(fakeDeathHpPct);
+        }
+    }
+    // ======= DOWNED / REVIVE =======
+
+    private void EnterDowned()
+    {
+        if (!IsServer) return;
+        if (IsDowned) return;
+
+        // Clamp HP to 0 and mark downed
+        currentHealth.Value = 0;
+        isDownedNV.Value = true;
+        reviveProgressNV.Value = 0f;
+
+        // Lock knockbacks for a tiny bit so body doesn't get tossed
+        SetInvulnerable(invulnerableTime);
+
+        // start bleed-out timer
+        if (bleedoutRoutine != null) StopCoroutine(bleedoutRoutine);
+        bleedoutRoutine = StartCoroutine(BleedoutTimer());
+    }
+
+    private IEnumerator BleedoutTimer()
+    {
+        float tEnd = Time.time + downedBleedoutTime;
+        while (Time.time < tEnd && IsDowned)
+            yield return null;
+
+        bleedoutRoutine = null;
+
+        if (IsDowned) // not revived in time
+            ServerFakeRespawn(fakeDeathHpPct);
+    }
+
+    // Called by the revive interaction when hold begins
+    public void ServerBeginRevive(GameObject helper)
+    {
+        if (!IsServer || !IsDowned || helper == null) return;
+        if (reviveRoutine != null) return;
+
+        reviveRoutine = StartCoroutine(ReviveHold(helper));
+    }
+
+    // Called by the revive interaction if helper stops/cancels
+    public void ServerCancelRevive(GameObject helper)
+    {
+        if (!IsServer) return;
+        if (reviveRoutine != null)
+        {
+            StopCoroutine(reviveRoutine);
+            reviveRoutine = null;
+        }
+        reviveProgressNV.Value = 0f;
+    }
+
+    private IEnumerator ReviveHold(GameObject helper)
+    {
+        float started = Time.time;
+        reviveProgressNV.Value = 0f;
+
+        const float reqDistance = 3.0f;
+
+        while (IsDowned && (Time.time - started) < reviveTime)
+        {
+            if (helper == null) { reviveProgressNV.Value = 0f; break; }
+
+            float dist = Vector3.Distance(helper.transform.position, transform.position);
+            if (dist > reqDistance) { reviveProgressNV.Value = 0f; break; }
+
+            reviveProgressNV.Value = Mathf.Clamp01((Time.time - started) / reviveTime);
+            yield return null;
+        }
+
+        reviveRoutine = null;
+
+        // Downed flag flipped off while we were reviving (revived by someone else or fake-death)
+        if (!IsDowned) yield break;
+
+        if (reviveProgressNV.Value >= 0.999f)
+        {
+            ServerRevive(reviveHpPct);
+            yield break;
+        }
+
+        // failed -> reset progress
+        reviveProgressNV.Value = 0f;
+    }
+
+
+    private void ServerRevive(float hpPct)
+    {
+        if (!IsServer) return;
+
+        // stop bleedout
+        if (bleedoutRoutine != null) { StopCoroutine(bleedoutRoutine); bleedoutRoutine = null; }
+
+        isDownedNV.Value = false;
+        reviveProgressNV.Value = 0f;
+
+        // bring back with hpPct of max and brief invuln
+        int hp = Mathf.Max(1, Mathf.RoundToInt(maxHealth * Mathf.Clamp01(hpPct)));
+        currentHealth.Value = Mathf.Clamp(hp, 1, maxHealth);
+        SetInvulnerable(invulnerableTime);
+    }
+
+    private void ServerFakeRespawn(float hpPct)
+    {
+        if (!IsServer) return;
+
+        // cancel timers
+        if (bleedoutRoutine != null) { StopCoroutine(bleedoutRoutine); bleedoutRoutine = null; }
+        if (reviveRoutine != null) { StopCoroutine(reviveRoutine); reviveRoutine = null; }
+
+        isDownedNV.Value = false;
+        reviveProgressNV.Value = 0f;
+
+        int hp = Mathf.Max(1, Mathf.RoundToInt(maxHealth * Mathf.Clamp01(hpPct)));
+        currentHealth.Value = Mathf.Clamp(hp, 1, maxHealth);
+        SetInvulnerable(invulnerableTime);
     }
 }

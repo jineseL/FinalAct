@@ -2,11 +2,6 @@ using UnityEngine;
 using Unity.Netcode;
 public class GameManager1:NetworkBehaviour
 {
-    //for testing 
-    /// <summary>
-    /// this script is for testing in the editor
-    /// </summary>
-    //[SerializeField] GameObject cameraGO;
 
 
     public static GameManager1 instance { get; private set; }

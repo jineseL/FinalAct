@@ -30,7 +30,7 @@ public class PlutoBoss : NetworkBehaviour, IDamageable
     [Header("Utility")]
     [SerializeField] private PlutoUtilityAi utilityAi;
 
-    public bool IsServer => base.IsServer; // convenience for PlutoUtilityAi
+    //public bool IsServer => base.IsServer; // convenience for PlutoUtilityAi
 
     public bool IsAlive => bossHealth != null && bossHealth.IsAlive;
 
@@ -121,6 +121,7 @@ public class PlutoBoss : NetworkBehaviour, IDamageable
 
     private IEnumerator StartAI_AfterDelay(float delay)
     {
+        thinkTimer = 5f; //hard coded to remove later
         yield return new WaitForSeconds(delay);
         if (bossHealth != null && bossHealth.IsAlive)
             aiActive = true;

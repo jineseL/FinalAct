@@ -126,10 +126,12 @@ public class Weapon1script : Weapons
     public void FpsFire()
     {
         if (fpsAnimator) fpsAnimator.Play("FpsDoubleBarrelFiring");
-        if (currentAmmoCount % 2 == 0)
-            Instantiate(ShootVFX1, FpsShootPoint1.position, FpsShootPoint1.rotation);
-        else
-            Instantiate(ShootVFX1, FpsShootPoint2.position, FpsShootPoint2.rotation);
+        SoundManager.PlaySfxAt("DoubleBarrelSFX", FpsShootPoint1.position, 0.8f, 1);
+        if (currentAmmoCount % 2 == 0) //Instantiate(ShootVFX1, firePoint);
+        Instantiate(ShootVFX1, FpsShootPoint1.position, FpsShootPoint1.rotation);
+        else //Instantiate(ShootVFX1, firePoint);
+        Instantiate(ShootVFX1, FpsShootPoint2.position, FpsShootPoint2.rotation);
+        
         // TODO: SFX
     }
 }

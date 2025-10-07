@@ -39,6 +39,22 @@ public class PlayerMotor : MonoBehaviour
     private Vector3 persistentTargetVel; // desired persistent velocity set by effects each frame
     public bool IsExternalForceLocked => blockNewExternalForces && Time.time < externalForceLockUntil;
 
+    [Header("Footsteps")]
+    [SerializeField] private string[] footstepKeys;  // keys from SoundManager.sfxTable (e.g., "step1","step2")
+    [SerializeField] private float stepDistance = 2.1f;       // meters between steps
+    [SerializeField] private float minStepInterval = 0.22f;   // seconds between steps
+    [SerializeField] private float stepVolume = 0.9f;
+    [SerializeField] private Vector2 stepPitchRange = new Vector2(0.95f, 1.05f);
+
+    // 3D playback settings (only affects how it sounds locally)
+    [SerializeField] private float stepSpatialBlend = 0.0f;    // 0 = 2D, 1 = 3D
+    [SerializeField] private float stepMinDistance = 1.0f;
+    [SerializeField] private float stepMaxDistance = 20.0f;
+
+    // runtime
+    private float _footstepAccum = 0f;
+    private float _footstepCooldown = 0f;
+
     // ===== Slow =====
     // current slow multiplier (1 = normal speed, 0.6 = 40% slow)
     private float moveFactor = 1f;
@@ -113,6 +129,7 @@ public class PlayerMotor : MonoBehaviour
 
         lastInput = input;
 
+        Vector3 posBefore = transform.position;
         // Normal input movement (local space)
         Vector3 moveDirection = new Vector3(input.x, 0, input.y);
         moveDirection = transform.TransformDirection(moveDirection);
@@ -139,6 +156,13 @@ public class PlayerMotor : MonoBehaviour
 
         // Decay external velocity smoothly; lower value = longer push
         externalForce = Vector3.Lerp(externalForce, Vector3.zero, 4f * Time.deltaTime);
+
+        Vector3 posAfter = transform.position;
+        Vector3 diff = posAfter - posBefore;
+        diff.y = 0f;
+        float horizontalDelta = diff.magnitude;
+
+        FootstepTick(horizontalDelta);
     }
 
     public void Jump()
@@ -208,6 +232,47 @@ public class PlayerMotor : MonoBehaviour
     {
         moveFactor = 1f;
         slowUntil = 0f;
+    }
+    private void FootstepTick(float horizontalDelta)
+    {
+        // Only count distance while grounded
+        if (!isGrounded)
+        {
+            _footstepAccum = 0f;
+            _footstepCooldown = Mathf.Max(0f, _footstepCooldown - Time.deltaTime);
+            return;
+        }
+
+        _footstepCooldown = Mathf.Max(0f, _footstepCooldown - Time.deltaTime);
+
+        if (horizontalDelta > 0.001f)
+            _footstepAccum += horizontalDelta;
+
+        if (_footstepAccum >= stepDistance && _footstepCooldown <= 0f)
+        {
+            PlayRandomFootstep();
+            _footstepAccum = 0f;
+            _footstepCooldown = minStepInterval;
+        }
+    }
+
+    private void PlayRandomFootstep()
+    {
+        if (footstepKeys == null || footstepKeys.Length == 0) return;
+
+        string key = footstepKeys[Random.Range(0, footstepKeys.Length)];
+        float pitch = Random.Range(stepPitchRange.x, stepPitchRange.y);
+
+        // Play at the player's current position (local only; no networking here)
+        SoundManager.PlaySfxAt(
+            key,
+            transform.position,
+            stepVolume,
+            pitch,
+            stepSpatialBlend,
+            stepMinDistance,
+            stepMaxDistance
+        );
     }
 }
 

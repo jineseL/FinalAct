@@ -13,10 +13,15 @@ public class PlayerHUD : NetworkBehaviour
     [SerializeField] private TMP_Text ammoText;
     [SerializeField] private GameObject bossPanel;
     [SerializeField] private Slider bossSlider;
+    [SerializeField] private GameObject bossDead;
 
     [Header("Refs")]
     [SerializeField] private PlayerHealth playerHealth;           // assign on prefab or GetComponent
     [SerializeField] private PlayerWeaponManager weaponManager;   // assign on prefab or GetComponent
+
+    [Header("Downed UI")]
+    [SerializeField] private GameObject downedOverlay; // full-screen red image (disabled by default)
+    [SerializeField] private Slider reviveSlider; //slider for revive
 
     // Cache
     private Weapons cachedWeapon;
@@ -103,6 +108,7 @@ public class PlayerHUD : NetworkBehaviour
 
         if (cachedBoss != null && cachedBoss.IsAlive)
         {
+            if(bossDead.activeSelf) bossDead.SetActive(false);
             bossPanel.SetActive(true);
             float max = Mathf.Max(1f, cachedBoss.MaxHP);
             bossSlider.value = Mathf.Clamp01(cachedBoss.CurrentHP / max);
@@ -110,7 +116,32 @@ public class PlayerHUD : NetworkBehaviour
         else
         {
             bossPanel.SetActive(false);
+            if (cachedBoss == null)
+                bossDead.SetActive(false);
+            else bossDead.SetActive(true);
         }
     }
+    public void SetDownedOverlay(bool down)
+    {
+        if (!IsOwner) return;
+
+        if (downedOverlay) downedOverlay.SetActive(down);
+        if (reviveSlider) { reviveSlider.gameObject.SetActive(down); reviveSlider.value = 0f; }
+
+        // Hide combat UI while downed
+        if (crosshair) crosshair.enabled = !down;
+        if (ammoPanel)
+        {
+            bool hasWeapon = weaponManager && weaponManager.currentWeapon != null;
+            ammoPanel.SetActive(!down && hasWeapon);
+        }
+    }
+
+    public void SetReviveProgress(float pct01)
+    {
+        if (!IsOwner) return;
+        if (reviveSlider) reviveSlider.value = Mathf.Clamp01(pct01);
+    }
+
 }
 

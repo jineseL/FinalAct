@@ -11,6 +11,7 @@ public static class Loader
         LobbyScene, //main menu
         LoadingScene, //loading screen
         ArenaScene,
+        PresentationArenaScene, //pluto old
     }
 
     private static Scene targetScene;

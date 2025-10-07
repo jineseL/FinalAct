@@ -43,8 +43,8 @@ public class GravityOrb : NetworkBehaviour, IDamageable
     [SerializeField] private float travelSpeed = 12f;       // to move to anchor/activated position
     [SerializeField] private float holdDuration = 3.5f;     // time pulling players, not in use currently
     [SerializeField] private float effectRadius = 18f;      // radius where pull applies
-    [SerializeField] private float minPull = 6f;            // at edge of radius
-    [SerializeField] private float maxPull = 28f;           // near center
+    /*[SerializeField] private float minPull = 6f;            // at edge of radius
+    [SerializeField] private float maxPull = 28f;           // near center*/
     [SerializeField] private float slowFactor = 0.65f;      // movement slow multiplier
     [SerializeField] private float slowRefresh = 0.25f;     // reapply slow this often
     [SerializeField] private float touchDamage = 25f;       // damage on contact while active
@@ -76,6 +76,17 @@ public class GravityOrb : NetworkBehaviour, IDamageable
     [Header("Damage Flash")]
     [SerializeField] private float damageFlashDuration = 0.10f; // seconds
     [SerializeField] private float damageFlashEnterSpeed = 16f; // how fast we reach red
+
+    [Header("Pull Tuning (works with your existing PlayerMotor)")]
+    [SerializeField] private float pullMinVelocity = 2f;   // desired persistent speed at edge
+    [SerializeField] private float pullMaxVelocity = 8f;   // desired persistent speed near center
+    [SerializeField] private float pullCurvePower = 2f;    // >1 flattens near center (less spike), 1 = linear
+    [SerializeField] private float distanceCapFactor = 2f; // clamp by dist: maxVel <= dist * factor
+
+    [Header("Slow RPC Gate")]
+    [SerializeField] private float slowRpcInterval = 0.25f; // send slow refresh at most 4x/sec
+    private readonly Dictionary<ulong, float> _nextSlowSend = new();
+
     // runtime
     private float currentSpin;
     private float targetSpin;
@@ -127,6 +138,7 @@ public class GravityOrb : NetworkBehaviour, IDamageable
     public override void OnNetworkDespawn()
     {
         netState.OnValueChanged -= OnNetStateChanged;
+        ClearPullClientRpc();
     }
     private void Update()
     {
@@ -186,29 +198,20 @@ public class GravityOrb : NetworkBehaviour, IDamageable
     {
         if (!IsServer) return;
 
+        var old = state;
         state = s;
-        netState.Value = s; // mirror to clients
-
-        // Server also applies presentation immediately
+        netState.Value = s;
         ApplyPresentationForState(s, immediate);
 
-        // Server-only logic flags
         switch (s)
         {
-            case GravityOrbState.Idle:
-                IsBusy = false;
-                SetDamageable(false);
-                break;
-            case GravityOrbState.Active:
-                IsBusy = true;
-                SetDamageable(true);
-                break;
-            case GravityOrbState.Dead:
-            case GravityOrbState.Respawning:
-                IsBusy = true;
-                SetDamageable(false);
-                break;
+            case GravityOrbState.Idle: IsBusy = false; SetDamageable(false); break;
+            case GravityOrbState.Active: IsBusy = true; SetDamageable(true); break;
+            default: IsBusy = true; SetDamageable(false); break;
         }
+
+        if (old == GravityOrbState.Active && s != GravityOrbState.Active)
+            ClearPullClientRpc();
     }
     private void ApplyPresentationForState(GravityOrbState s, bool immediate)
     {
@@ -419,6 +422,7 @@ public class GravityOrb : NetworkBehaviour, IDamageable
         if (nm == null) return;
 
         Vector3 center = transform.position;
+        float now = Time.time;
 
         foreach (var kv in nm.ConnectedClients)
         {
@@ -426,28 +430,41 @@ public class GravityOrb : NetworkBehaviour, IDamageable
             if (po == null || !po.IsSpawned) continue;
 
             var motor = po.GetComponent<PlayerMotor>();
-            var hpComp = po.GetComponent<PlayerHealth>();
             var ctrl = po.GetComponent<CharacterController>();
             if (motor == null) continue;
 
-            // distance-based pull
+            // Measure distance from player center to orb
             Vector3 playerPos = ctrl ? ctrl.transform.TransformPoint(ctrl.center) : po.transform.position;
             Vector3 toCenter = center - playerPos;
             float dist = toCenter.magnitude;
-
             if (dist > effectRadius) continue;
 
-            float t = 1f - Mathf.Clamp01(dist / Mathf.Max(0.001f, effectRadius)); // 0 at edge, 1 near center
-            float forceMag = Mathf.Lerp(minPull, maxPull, t);
-            Vector3 force = toCenter.normalized * forceMag;
+            // 0 at edge, 1 near center
+            float t = 1f - Mathf.Clamp01(dist / Mathf.Max(0.001f, effectRadius));
 
-            // client-authoritative movement: push force on the owning client
-            SetPullVelocityForClient(kv.Key, force);
+            // Shape it so it doesn't spike near the center
+            float shaped = Mathf.Pow(t, Mathf.Max(1f, pullCurvePower)); // power>1 = softer near center
 
-            // apply slow
-            ApplySlowToVictimClient(kv.Key, slowFactor, slowRefresh * 1.1f);
+            // Desired persistent velocity magnitude
+            float velMag = Mathf.Lerp(pullMinVelocity, pullMaxVelocity, shaped);
+
+            // Optional extra safety: cap by distance so very close players don't overshoot
+            velMag = Mathf.Min(velMag, dist * distanceCapFactor);
+
+            Vector3 desiredVel = (dist > 0.001f) ? toCenter.normalized * velMag : Vector3.zero;
+
+            // Ask that client to SET its persistent velocity for this frame (no stacking)
+            SetPullVelocityForClient(kv.Key, desiredVel);
+
+            // Throttle slow application to avoid spamming RPCs
+            if (!_nextSlowSend.TryGetValue(kv.Key, out var next) || now >= next)
+            {
+                ApplySlowToVictimClient(kv.Key, slowFactor, slowRefresh * 1.1f);
+                _nextSlowSend[kv.Key] = now + Mathf.Max(0.05f, slowRpcInterval);
+            }
         }
     }
+
 
     // touch damage while active
     private void OnTriggerEnter(Collider other)

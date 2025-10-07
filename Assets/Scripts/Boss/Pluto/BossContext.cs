@@ -6,7 +6,7 @@ using System.Collections.Generic;
 /// </summary>
 public sealed class BossContext
 {
-    public PlutoBoss Boss;
+    public SnakeBossController Boss;
     public IReadOnlyList<GameObject> Players; //list of players
     public Vector3 BossPos; //boss position
     public float BossHpPct; //boss percentage
@@ -23,6 +23,7 @@ public sealed class BossContext
     // Availability
     public bool AnyGravityFree;
     public bool AnySlamFree;
+    //public bool AnyMissileFree;
     // ctx.AnyGravityFree = actions.Any(a => a.Kind == OrbActionKind.Gravity && a.CanExecute(ctx));
     //to enforce rules:
     /*Do not pick two actions of the same kind in one tick.
