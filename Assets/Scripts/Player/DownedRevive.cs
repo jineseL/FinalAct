@@ -34,7 +34,6 @@ public class DownedRevive : NetworkBehaviour, IInteractable
         if (!IsServer) return;
         if (health == null || !health.IsDowned) return;
         if (interactor == null) return;
-        Debug.Log("test");
         // range check
         if (Vector3.Distance(interactor.transform.position, transform.position) > interactRange)
             return;

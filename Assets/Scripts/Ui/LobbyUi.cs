@@ -26,9 +26,9 @@ public class LobbyUi : MonoBehaviour
         createGameButton.onClick.AddListener(() =>
         {
             // Configure transport to listen on all interfaces (LAN) before hosting
-            var utp = NetworkManager.Singleton.GetComponent<UnityTransport>();
-            utp.SetConnectionData("0.0.0.0", gamePort);
 
+            var utp = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            utp.SetConnectionData("0.0.0.0", (ushort)gamePort);
             NetworkManager.Singleton.StartHost();
 
             // Start broadcasting
