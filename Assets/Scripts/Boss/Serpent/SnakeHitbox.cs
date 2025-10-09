@@ -141,7 +141,7 @@ public class SnakeHitbox : NetworkBehaviour, IDamageable
                 Vector3 pos = other.ClosestPoint(_col.bounds.center);
                 Vector3 normal = Vector3.up;
                 if (Physics.Raycast(_col.bounds.center + Vector3.up * 0.5f, Vector3.down,
-                    out var hit, 5f, groundLayers, QueryTriggerInteraction.Ignore))
+                    out RaycastHit hit, 5f, groundLayers, QueryTriggerInteraction.Ignore))
                 {
                     pos = hit.point;
                     normal = hit.normal;

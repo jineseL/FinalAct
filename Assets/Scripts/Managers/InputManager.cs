@@ -46,7 +46,7 @@ public class InputManager : NetworkBehaviour
         onFoot.Dash.performed += ctx => motor.Dash();
         onFoot.Fire.performed += ctx => weaponManager.TryFire();
         onFoot.Reload.performed += ctx => weaponManager.TryReload();
-        onFoot.Interact.performed += ctx => weaponManager.TryInteract();
+        onFoot.Interact.started += ctx => weaponManager.TryInteract();
         onFoot.Interact.canceled += ctx => weaponManager.TryInteractCancel();
         onFoot.Esc.performed += ctx => AppQuit.Quit();
         onFoot.Enable();

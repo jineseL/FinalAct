@@ -47,7 +47,6 @@ public class LanBroadcastClient : MonoBehaviour
             listening = true;
             listenThread = new Thread(ListenLoop) { IsBackground = true };
             listenThread.Start();
-
             Debug.Log($"[LanBroadcastClient] Listening for broadcasts on {broadcastPort}");
         }
         catch (Exception ex)
@@ -56,6 +55,28 @@ public class LanBroadcastClient : MonoBehaviour
             StopListening();
         }
     }
+    /*public void JoinLobby()
+    {
+        if (listening) return;
+
+        try
+        {
+            udpClient = new UdpClient(AddressFamily.InterNetwork);
+            udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            udpClient.EnableBroadcast = true;
+            udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, broadcastPort));
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[LanBroadcastClient] Bind failed: {ex.Message}");
+            return;
+        }
+
+        listening = true;
+        Debug.Log($"[LanBroadcastClient] Listening for broadcasts on {broadcastPort}");
+        listenThread = new Thread(ListenLoop) { IsBackground = true };
+        listenThread.Start();
+    }*/
 
     private void ListenLoop()
     {
@@ -67,7 +88,7 @@ public class LanBroadcastClient : MonoBehaviour
             {
                 byte[] data = udpClient.Receive(ref endPoint); // blocking
                 string message = Encoding.UTF8.GetString(data);
-
+                Debug.Log("abc");
                 if (message.StartsWith("GameLobby:"))
                 {
                     // parse port

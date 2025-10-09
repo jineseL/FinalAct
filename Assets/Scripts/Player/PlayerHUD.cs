@@ -126,7 +126,10 @@ public class PlayerHUD : NetworkBehaviour
         if (!IsOwner) return;
 
         if (downedOverlay) downedOverlay.SetActive(down);
-        if (reviveSlider) { reviveSlider.gameObject.SetActive(down); reviveSlider.value = 0f; }
+        if (reviveSlider) 
+        { reviveSlider.gameObject.SetActive(down); 
+            reviveSlider.value = 0f; 
+        }
 
         // Hide combat UI while downed
         if (crosshair) crosshair.enabled = !down;

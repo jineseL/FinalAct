@@ -86,20 +86,23 @@ public class PlayerHealth : NetworkBehaviour
     }
     private void OnReviveProgressChanged(float oldV, float newV)
     {
-        // Optional: owner or reviver HUD can observe this NetworkVariable to show a bar
+        if (!IsOwner) return;
+
+        var hud = GetComponentInChildren<PlayerHUD>(true);
+        if (hud) hud.SetReviveProgress(newV);
     }
 
     private void SetDownedPresentation(bool down)
     {
         // Disable owner input + show red overlay
-        var input = GetComponentInChildren<InputManager>(true);
+        InputManager input = GetComponentInChildren<InputManager>(true);
         if (input) input.enabled = !down;
 
         // Freeze movement a bit more if you want:
-        var motor = GetComponent<PlayerMotor>();
+        PlayerMotor motor = GetComponent<PlayerMotor>();
         if (motor) motor.ClearSlow(); // optional
         // Red overlay (if you have a HUD)
-        var hud = GetComponentInChildren<PlayerHUD>(true);
+        PlayerHUD hud = GetComponentInChildren<PlayerHUD>(true);
         if (hud) hud.SetDownedOverlay(down); // implement SetDownedOverlay(bool) in your HUD
     }
     private void OnHealthChanged(int oldValue, int newValue)
@@ -301,8 +304,8 @@ public class PlayerHealth : NetworkBehaviour
         // If already downed (double kill), just fake-death immediately
         if (IsDowned)
         {
-            ServerFakeRespawn(fakeDeathHpPct);
-            DieText.SetActive(true);
+            //ServerFakeRespawn(fakeDeathHpPct);
+            //DieText.SetActive(true);
             return;
         }
 

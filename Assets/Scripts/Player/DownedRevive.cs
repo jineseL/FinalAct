@@ -3,7 +3,7 @@ using UnityEngine;
 
 public class DownedRevive : NetworkBehaviour, IInteractable
 {
-    [SerializeField] private float interactRange = 3f; // sanity range check on server
+    [SerializeField] private float interactRange = 5f; // sanity range check on server
 
     private PlayerHealth health;
 
@@ -37,7 +37,6 @@ public class DownedRevive : NetworkBehaviour, IInteractable
         // range check
         if (Vector3.Distance(interactor.transform.position, transform.position) > interactRange)
             return;
-
         // begin revive hold
         health.ServerBeginRevive(interactor);
     }

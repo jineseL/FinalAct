@@ -1234,9 +1234,9 @@ CapsuleCollider:
   m_Enabled: 1
   serializedVersion: 2
   m_Radius: 0.4523473
-  m_Height: 1.7160745
+  m_Height: 1.9199052
   m_Direction: 1
-  m_Center: {x: 6.332197e-14, y: -0.040919065, z: -0.00003173947}
+  m_Center: {x: 0, y: 0.060996294, z: -0.000031739473}
 --- !u!1 &5639445191131230395
 GameObject:
   m_ObjectHideFlags: 0
@@ -2116,8 +2116,8 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   maxHealth: 100
   invulnerableTime: 1
-  downedBleedoutTime: 5
-  reviveTime: 3
+  downedBleedoutTime: 60
+  reviveTime: 1
   reviveHpPct: 0.5
   fakeDeathHpPct: 0.25
   DieText: {fileID: 1762950447120721643}

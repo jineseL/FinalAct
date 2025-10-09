@@ -9,7 +9,7 @@ public abstract class AttackActionBase : MonoBehaviour
     public virtual bool CanExecute(BossContext ctx)
     {
         //cooldown
-        Debug.Log("ctx.TimeNow= " + ctx.TimeNow + "lastUsed + Cooldown = " + lastUsed + Cooldown);
+        //Debug.Log("ctx.TimeNow= " + ctx.TimeNow + "lastUsed + Cooldown = " + lastUsed + Cooldown);
         return !IsBusy && (ctx.TimeNow >= lastUsed + Cooldown);
     }
 
