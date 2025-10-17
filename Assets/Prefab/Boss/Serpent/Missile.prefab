@@ -99,15 +99,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: d02278f3f2ac6914f8e470b20377d6bf, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.1
+      value: 0.075
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: d02278f3f2ac6914f8e470b20377d6bf, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.1
+      value: 0.075
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: d02278f3f2ac6914f8e470b20377d6bf, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.1
+      value: 0.075
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: d02278f3f2ac6914f8e470b20377d6bf, type: 3}
       propertyPath: m_LocalPosition.x
@@ -276,13 +276,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SnakeHomingMissile
   ShowTopMostFoldoutHeaderGroup: 1
-  initialSpeed: 30
-  speedDecayDuration: 0.8
-  targetSpeed: 15
+  initialSpeed: 25
+  speedDecayDuration: 0.2
+  targetSpeed: 20
   speed: 13
-  rotateDegPerSec: 80
+  rotateDegPerSec: 140
   lifeRemaining: 10
-  forwardRemaining: 5
+  forwardRemaining: 4
+  lockOnDot: 1
   hp: 1
   explosionVfxPrefab: {fileID: 358637981425055526, guid: fe61e81b94ce0b64297d9f751a7e73cf, type: 3}
   explosionVfxLifetime: 3

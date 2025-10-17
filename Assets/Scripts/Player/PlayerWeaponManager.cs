@@ -142,6 +142,7 @@ public class PlayerWeaponManager : NetworkBehaviour
     }
 
     public void TryFire() { if (currentWeapon != null) currentWeapon.Fire(); }
+    public void TryAltFire() { if (currentWeapon != null) currentWeapon.AltFire(); }
     public void TryReload() { if (currentWeapon != null) currentWeapon.Reload(); }
     public void TryInteractCancel()
     {

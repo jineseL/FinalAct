@@ -111,7 +111,7 @@ public class BlastAoE : NetworkBehaviour
         }
 
         // Enemies: damage only (no knockback)
-        if (other.gameObject.layer == EnemyLayer)
+        /*if (other.gameObject.layer == EnemyLayer)
         {
             
             var dmg = other.GetComponentInParent<IDamageable>();
@@ -121,7 +121,7 @@ public class BlastAoE : NetworkBehaviour
                 dmg.TakeDamage(enemyDamage);
                 return;
             }
-        }
+        }*/
 
         // anything else: ignore or custom behavior
     }

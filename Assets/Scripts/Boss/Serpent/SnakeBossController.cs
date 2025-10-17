@@ -24,6 +24,7 @@ public class SnakeBossController : NetworkBehaviour
     // ========================== Head Movement ==========================
     [Header("Head Movement")]
     [SerializeField] private float moveSpeed = 12f;           // Constant forward speed in local +Z.
+    public float OriginalSpeed => moveSpeed;
     [SerializeField] private float yawTurnSpeedDeg = 70f;     // Max yaw degrees per second (local Y).
     [SerializeField] private float pitchTurnSpeedDeg = 55f;   // Max pitch degrees per second (local X).
     [SerializeField] private float rollUprightSpeedDeg = 240f;// Max roll correction per second (local Z).
@@ -36,27 +37,22 @@ public class SnakeBossController : NetworkBehaviour
     [SerializeField] private float slitherFrequency = 0.8f;       // Oscillations per second.
     [SerializeField] private float slitherYawAmplitudeDeg = 15f;  // Peak yaw deviation added by slither (degrees).
 
-    //[Tooltip("Unused in yaw-only mode. Previously used to smooth roll banking when slither also banked the head. Safe to remove or keep for future.")]
-    //[SerializeField] private float slitherBankLerp = 6f;          // Unused in this pure yaw mode.
-
     // Runtime slither state (yaw-only)
     private float slitherPhase = 0f;       // Phase accumulator for the sine wave.
     private float lastSlitherYawDeg = 0f;  // Last slither yaw angle to compute frame delta.
 
     [Header("Chase Mode")]
     [SerializeField] private float chaseDurationDefault = 3.0f; // seconds
-    //[SerializeField] private float chaseArriveDistance = 1.5f;  // optional, not strictly needed
-                                                                // Optional: override turn speeds during chase (set <=0 to use normal speeds)
-    [SerializeField] private float chaseYawTurnSpeedDeg = 0f;
-    [SerializeField] private float chasePitchTurnSpeedDeg = 0f;
+    [SerializeField] private float chaseYawTurnSpeedDeg = 0f;   // Optional per-chase yaw override; <=0 uses normal
+    [SerializeField] private float chasePitchTurnSpeedDeg = 0f; // Optional per-chase pitch override; <=0 uses normal
+
     [Header("Chase Altitude Guard")]
-    [SerializeField] private Transform chaseMinAltitudeMarker; // drag a scene transform; its Y is the ground level
-    [SerializeField] private float chaseMinAltitudeBuffer = 1.5f; // extra clearance above the marker
+    [SerializeField] private Transform chaseMinAltitudeMarker; // drag a scene transform; its Y is the ground level used during chase
+    [SerializeField] private float chaseMinAltitudeBuffer = 1.5f; // extra clearance above the marker while chasing
+
     [Header("Chase Speed Boost")]
     [SerializeField] private float chaseFacingTopSpeed = 20f;      // faster forward speed when head is facing target
     [SerializeField, Range(-1f, 1f)] private float chaseFacingDotThreshold = 0.95f; // how aligned head.forward must be
-    [SerializeField] private float chaseSpeedAccel = 18f;          // how fast we ramp up (units per second^2)
-    [SerializeField] private float chaseSpeedDecel = 18f;          // how fast we ramp down
 
     [Header("Attack Target Override")]
     [SerializeField] private float attackArriveDistance = 2.5f;
@@ -66,23 +62,53 @@ public class SnakeBossController : NetworkBehaviour
 
     // Speed control (base speed is moveSpeed). Actions can lower/restore.
     [Header("Speed Target")]
-    [SerializeField] private float speedAccel = 18f;
-    [SerializeField] private float speedDecel = 18f;
-    private float speedTarget;
+    [SerializeField] private float speedAccel = 18f;   // how fast forward speed rises to target
+    [SerializeField] private float speedDecel = 18f;   // how fast forward speed falls to target
+    private float speedTarget;                         // current forward-speed target (server)
+
+    // Steering suppression flags (server-owned)
+    private bool suppressSlither = false;
+    private bool suppressRoll = false;
 
     // runtime
     private float currentForwardSpeed; // what we actually use this frame
+
+    // Arrival mode for the current attack override
+    private enum OverrideArrivalMode { Radial, VerticalY }
+    private OverrideArrivalMode overrideArrivalMode = OverrideArrivalMode.Radial;
+
+    [SerializeField] private float verticalArriveEpsilon = 0.25f; // how close in Y counts as arrived for VerticalY
+    public float VerticalArriveEpsilon => verticalArriveEpsilon;  // optional getter
 
     // runtime chase state (server-only writes)
     private NetworkObject chaseTargetNo;
     private float chaseUntil;
     public bool IsChasing => IsServer && chaseTargetNo && chaseTargetNo.IsSpawned && Time.time < chaseUntil;
     public bool AttackOverrideActive => attackOverrideActive && Time.time < attackOverrideDeadline;
+
+    public float GroundMinY => chaseMinAltitudeMarker ? chaseMinAltitudeMarker.position.y : float.NegativeInfinity;
     public Vector3 GetAttackOverrideTarget() => attackOverrideTarget;
 
     // Speed target for temporary slow/restore (used during charge)
     public void SetSpeedTarget(float target) { if (IsServer) speedTarget = Mathf.Max(0f, target); }
     public void ResetSpeedTarget() { if (IsServer) speedTarget = moveSpeed; }
+
+    // ========================== Altitude Guard (Global) ==========================
+    [Header("Altitude Guard (Global)")]
+    [Tooltip("World-space baseline Y the head should never go below.")]
+    [SerializeField] private Transform groundMarker;
+
+    [Tooltip("Start aggressively pitching up once the head drops to this many units above the baseline.")]
+    [SerializeField] private float softGuardAbove = 1.5f;
+
+    [Tooltip("Absolute lower bound above the baseline. If the head reaches this, snap upward even faster.")]
+    [SerializeField] private float hardGuardAbove = 0.1f;
+
+    [Tooltip("How fast to pitch up when in the soft guard zone (deg/sec).")]
+    [SerializeField] private float softLevelSpeedDeg = 360f;
+
+    [Tooltip("How fast to pitch up when at/under the hard guard zone (deg/sec).")]
+    [SerializeField] private float hardSnapSpeedDeg = 1080f;
 
     // ========================== Networked debug/state ==========================
     private NetworkVariable<int> phase = new(
@@ -95,10 +121,6 @@ public class SnakeBossController : NetworkBehaviour
     [Header("Phase Gate")]
     [SerializeField] private float phase2HpPct = 0.5f; // Switch to phase 2 when health <= 50%.
 
-    /// <summary>
-    /// Server wires references, picks initial target, and delays AI until intro ends.
-    /// Clients just run their chain solver; head pose replicates via NetworkTransform.
-    /// </summary>
     public override void OnNetworkSpawn()
     {
         if (!bossHealth) bossHealth = GetComponent<BossHealth>();
@@ -114,6 +136,7 @@ public class SnakeBossController : NetworkBehaviour
             {
                 bossHealth.ScaleMaxHp(0.5f, refill: true);
             }
+
             PickRandomTargetServer(); // Also sets the timeout deadline.
 
             float delay = 0f;
@@ -125,18 +148,12 @@ public class SnakeBossController : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Called by server to enable the utility AI after intro cutscene.
-    /// </summary>
     private void ActivateAI_Server()
     {
         if (!IsServer || !ai) return;
         ai.Activate(this);
     }
 
-    /// <summary>
-    /// Server ticks movement and phase. Clients do nothing here.
-    /// </summary>
     private void Update()
     {
         if (!IsServer) return;
@@ -147,17 +164,14 @@ public class SnakeBossController : NetworkBehaviour
 
     // ========================== Movement loop ==========================
 
-    /// <summary>
-    /// Server-only head movement: always forward, steer to waypoint, level roll, add yaw slither.
-    /// Picks a new target on arrival or timeout.
-    /// </summary>
     private void Server_MoveHead()
     {
         if (!head) return;
         bool chasing = IsChasing;
         Vector3 faceTargetPos = chasing ? GetChaseTargetPosition() : Vector3.zero;
 
-        float desiredSpeed = speedTarget; // base from action or default moveSpeed
+        // Speed logic (boost when nicely lined up in a chase)
+        float desiredSpeed = speedTarget;
         if (chasing && faceTargetPos != Vector3.zero)
         {
             Vector3 toTarget = (faceTargetPos - head.position);
@@ -165,7 +179,7 @@ public class SnakeBossController : NetworkBehaviour
             {
                 float dot = Vector3.Dot(head.forward, toTarget.normalized);
                 if (dot >= chaseFacingDotThreshold)
-                    desiredSpeed = Mathf.Max(desiredSpeed, chaseFacingTopSpeed); // boost while nicely lined up
+                    desiredSpeed = Mathf.Max(desiredSpeed, chaseFacingTopSpeed);
             }
         }
 
@@ -181,22 +195,19 @@ public class SnakeBossController : NetworkBehaviour
         float rollStep = 0f;
         float slitherYawDelta = 0f;
 
-        // prefer chase target if active, else waypoint
-        Vector3 targetPos = AttackOverrideActive? GetAttackOverrideTarget(): (chasing ? GetChaseTargetPosition() : GetCurrentTargetPosition());
+        // prefer chase target if active, else waypoint, but override if an action says so
+        Vector3 targetPos = AttackOverrideActive
+            ? GetAttackOverrideTarget()
+            : (chasing ? GetChaseTargetPosition() : GetCurrentTargetPosition());
 
-        // altitude guard ONLY while chasing 
+        // Extra chase altitude guard (your existing per-chase guard)
         if (chasing && chaseMinAltitudeMarker)
         {
             float minY = chaseMinAltitudeMarker.position.y + chaseMinAltitudeBuffer;
 
-            // If we’re already at/under the min altitude and the chase target is below us,
-            // clamp the target's Y so ComputeSteer won't generate a nose-down pitch.
             if (head.position.y <= minY && targetPos.y < head.position.y)
-            {
-                targetPos.y = head.position.y; // keep current altitude
-            }
+                targetPos.y = head.position.y;
 
-            // Optional: also forbid aiming below the minY at all
             targetPos.y = Mathf.Max(targetPos.y, minY);
         }
 
@@ -215,26 +226,31 @@ public class SnakeBossController : NetworkBehaviour
             // Aim toward target
             ComputeSteer(targetPos, out steerYaw, out steerPitch);
 
+            // >>> NEW: global altitude guard (never go below baseline) <<<
+            ApplyGlobalAltitudeGuard(ref steerPitch);
+
             // Restore turn speeds
             yawTurnSpeedDeg = saveYaw;
             pitchTurnSpeedDeg = savePitch;
 
             // ----- Arrival / timeout handling (three cases) -----
-
             if (AttackOverrideActive)
             {
-                bool arrived = (head.position - targetPos).sqrMagnitude <= attackArriveDistance * attackArriveDistance;
+                bool arrived;
+                if (overrideArrivalMode == OverrideArrivalMode.VerticalY)
+                    arrived = Mathf.Abs(head.position.y - targetPos.y) <= verticalArriveEpsilon;
+                else
+                    arrived = (head.position - targetPos).sqrMagnitude <= attackArriveDistance * attackArriveDistance;
+
                 bool timedOut = Time.time >= attackOverrideDeadline;
                 if (arrived || timedOut)
                 {
                     ClearAttackOverride();
-                    lastSlitherYawDeg = 0f; // keep slither smooth next frame
-                                            // Do NOT PickRandomTargetServer here; the action continues the sequence.
+                    lastSlitherYawDeg = 0f;
                 }
             }
             else if (chasing)
             {
-                // end chase when target lost or timer elapsed, then resume roam
                 bool lostTarget = (!chaseTargetNo || !chaseTargetNo.IsSpawned);
                 bool chaseOver = Time.time >= chaseUntil;
                 if (lostTarget || chaseOver)
@@ -246,7 +262,6 @@ public class SnakeBossController : NetworkBehaviour
             }
             else
             {
-                // normal waypoint arrival/timeout
                 bool arrived = (head.position - targetPos).sqrMagnitude <= arriveDistance * arriveDistance;
                 bool timedOut = Time.time > currentTargetDeadline;
                 if (arrived || timedOut)
@@ -257,12 +272,11 @@ public class SnakeBossController : NetworkBehaviour
             }
         }
 
-
         // Level roll toward world-up (no bank in yaw-only mode)
-        rollStep = ComputeRollLevelStep();
+        rollStep = suppressRoll ? 0f : ComputeRollLevelStep();
 
         // Pure yaw slither delta
-        slitherYawDelta = ComputeSlitherYawDelta();
+        slitherYawDelta = suppressSlither ? 0f : ComputeSlitherYawDelta();
 
         // Combine and apply once (local axes)
         float yawDelta = steerYaw + slitherYawDelta;
@@ -270,18 +284,17 @@ public class SnakeBossController : NetworkBehaviour
         float rollDelta = rollStep;
         ApplyLocalRotation(yawDelta, pitchDelta, rollDelta);
 
-        // Arrival or timeout
+        // Secondary guard: if still timing out/arriving when not chasing
         if (targetPos != Vector3.zero)
         {
             if (chasing)
             {
-                // NEW: end chase on timer or lost target, then resume normal roaming
                 bool lostTarget = (!chaseTargetNo || !chaseTargetNo.IsSpawned);
                 bool chaseOver = Time.time >= chaseUntil;
                 if (lostTarget || chaseOver)
                 {
                     StopChase();
-                    PickRandomTargetServer(); // reset to roaming
+                    PickRandomTargetServer();
                     lastSlitherYawDeg = 0f;
                 }
             }
@@ -291,8 +304,8 @@ public class SnakeBossController : NetworkBehaviour
                 bool timedOut = Time.time > currentTargetDeadline;
                 if (arrived || timedOut)
                 {
-                    PickRandomTargetServer(); // Resets deadline
-                    lastSlitherYawDeg = 0f;   // Reset delta so next slither step is smooth
+                    PickRandomTargetServer();
+                    lastSlitherYawDeg = 0f;
                 }
             }
         }
@@ -317,6 +330,45 @@ public class SnakeBossController : NetworkBehaviour
         // pitch around local X (nose up/down). Negative makes nose go up for +Y target
         float pitchErrDeg = -Mathf.Rad2Deg * Mathf.Atan2(toLocal.y, Mathf.Max(0.0001f, toLocal.z));
         pitchStepDeg = Mathf.Clamp(pitchErrDeg, -pitchTurnSpeedDeg * Time.deltaTime, pitchTurnSpeedDeg * Time.deltaTime);
+    }
+
+    /// <summary>
+    /// Global altitude guard:
+    /// - If head Y is below soft guard height, forbid any nose-down pitch and push up quickly.
+    /// - If at/under hard guard height, push up even faster (snap).
+    /// This does not teleport; it just forces pitch so you never continue diving below the baseline.
+    /// </summary>
+    private void ApplyGlobalAltitudeGuard(ref float pitchStepDeg)
+    {
+        if (!groundMarker) return;
+
+        float baselineY = groundMarker.position.y;
+        float softY = baselineY + Mathf.Max(0f, softGuardAbove);
+        float hardY = baselineY + Mathf.Max(0f, hardGuardAbove);
+        float y = head.position.y;
+
+        // Hard guard: at/under hardY => snap up strongly
+        if (y <= hardY)
+        {
+            // In your system, negative pitch is nose-up. Force a minimum nose-up snap this frame.
+            float minUp = -hardSnapSpeedDeg * Time.deltaTime;
+            if (pitchStepDeg > minUp) pitchStepDeg = minUp;
+            return;
+        }
+
+        // Soft guard: below softY => prevent any further nose-down; if pointing down, force nose-up quickly
+        if (y <= softY)
+        {
+            // No more nose-down while in the soft zone
+            if (pitchStepDeg > 0f) pitchStepDeg = 0f;
+
+            // If the head is pointing downward (forward.y < 0), add an aggressive nose-up push
+            if (head.forward.y < 0f)
+            {
+                float up = -softLevelSpeedDeg * Time.deltaTime; // negative = nose-up
+                if (pitchStepDeg > up) pitchStepDeg = up;
+            }
+        }
     }
 
     /// <summary>
@@ -356,18 +408,31 @@ public class SnakeBossController : NetworkBehaviour
     private void ApplyLocalRotation(float yawDeg, float pitchDeg, float rollDeg)
     {
         Quaternion dq =
-            Quaternion.AngleAxis(yawDeg, head.up) *  // yaw about local Y
-            Quaternion.AngleAxis(pitchDeg, head.right) *  // pitch about local X
-            Quaternion.AngleAxis(rollDeg, head.forward);   // roll about local Z
+            Quaternion.AngleAxis(yawDeg, head.up) *
+            Quaternion.AngleAxis(pitchDeg, head.right) *
+            Quaternion.AngleAxis(rollDeg, head.forward);
 
         head.rotation = dq * head.rotation;
     }
 
+    /// Suppress slither and roll while an action needs precise aiming.
+    /// Call with (true, true) to disable both; restore with (false, false).
+    public void SetSteeringSuppression(bool noSlither, bool noRoll)
+    {
+        if (!IsServer) return;
+        suppressSlither = noSlither;
+        suppressRoll = noRoll;
+    }
+    public void SetSpeedImmediate(float value)
+    {
+        if (!IsServer) return;
+        value = Mathf.Max(0f, value);
+        speedTarget = value;
+        // currentForwardSpeed is your private runtime speed; set it directly here since we are inside the class.
+        currentForwardSpeed = value;
+    }
     // ========================== Phase / Context ==========================
 
-    /// <summary>
-    /// Updates phase (1 or 2) based on health percentage, server-only.
-    /// </summary>
     private void Server_UpdatePhase()
     {
         if (!bossHealth) return;
@@ -378,9 +443,6 @@ public class SnakeBossController : NetworkBehaviour
 
     public bool Phase2 => phase.Value >= 2;
 
-    /// <summary>
-    /// Builds the BossContext for Utility AI: players, distances, phase, time. Server-only.
-    /// </summary>
     public BossContext BuildContext()
     {
         var nm = NetworkManager.Singleton;
@@ -428,13 +490,20 @@ public class SnakeBossController : NetworkBehaviour
             TimeNow = Time.time
         };
     }
+
     // Public API for actions:
     public void SetAttackOverride(Vector3 worldPos, float timeoutSeconds)
+    {
+        SetAttackOverride(worldPos, timeoutSeconds, verticalY: false);
+    }
+
+    public void SetAttackOverride(Vector3 worldPos, float timeoutSeconds, bool verticalY)
     {
         if (!IsServer) return;
         attackOverrideActive = true;
         attackOverrideTarget = worldPos;
         attackOverrideDeadline = Time.time + Mathf.Max(0.1f, timeoutSeconds);
+        overrideArrivalMode = verticalY ? OverrideArrivalMode.VerticalY : OverrideArrivalMode.Radial;
     }
 
     public void ClearAttackOverride()
@@ -444,10 +513,6 @@ public class SnakeBossController : NetworkBehaviour
     }
 
     // ========================== Waypoints ==========================
-
-    /// <summary>
-    /// Returns the current target world position from waypoint list or Vector3.zero if invalid.
-    /// </summary>
     private Vector3 GetCurrentTargetPosition()
     {
         if (waypoints == null || waypoints.Count == 0) return Vector3.zero;
@@ -456,9 +521,6 @@ public class SnakeBossController : NetworkBehaviour
         return t ? t.position : Vector3.zero;
     }
 
-    /// <summary>
-    /// Picks a new random waypoint (server-only) and resets the timeout deadline.
-    /// </summary>
     private void PickRandomTargetServer()
     {
         if (!IsServer) return;
@@ -480,9 +542,7 @@ public class SnakeBossController : NetworkBehaviour
         currentTargetDeadline = Time.time + Mathf.Max(0.1f, targetTimeoutSeconds);
     }
 
-    //chase functions
-    // Begin a chase toward a specific target player for a duration.
-    // Returns true if accepted; false if invalid or already chasing and you want to ignore.
+    // ========================== Chase API ==========================
     public bool BeginChase(NetworkObject target, float duration)
     {
         if (!IsServer || target == null || !target.IsSpawned) return false;
@@ -491,22 +551,19 @@ public class SnakeBossController : NetworkBehaviour
         return true;
     }
 
-    // Stop chasing early (optional API)
     public void StopChase()
     {
         if (!IsServer) return;
         chaseTargetNo = null;
         chaseUntil = 0f;
-        // optional: immediately pick a new waypoint to avoid lingering
     }
 
-    // Expose a helper to get current chase target world pos (or Vector3.zero if none)
     private Vector3 GetChaseTargetPosition()
     {
-        return (IsChasing && chaseTargetNo && chaseTargetNo.IsSpawned)? chaseTargetNo.transform.position: Vector3.zero;
+        return (IsChasing && chaseTargetNo && chaseTargetNo.IsSpawned)
+            ? chaseTargetNo.transform.position
+            : Vector3.zero;
     }
-    /// <summary>
-    /// Exposes the head transform for other systems if needed.
-    /// </summary>
+
     public Transform Head => head;
 }

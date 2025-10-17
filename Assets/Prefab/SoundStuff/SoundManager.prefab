@@ -68,5 +68,7 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: 8bc5e31c2102a9e479be1d84b48bb318, type: 3}
   - key: MissileExplode
     clip: {fileID: 8300000, guid: d1f5adb003da49744ade0ecf84c2d2e2, type: 3}
+  - key: MissileExplode
+    clip: {fileID: 8300000, guid: d1f5adb003da49744ade0ecf84c2d2e2, type: 3}
   sfxVolume: 1
   temp3DLayer: 0

@@ -100,7 +100,7 @@ public class SnakeMouthOrbBarrageAction : AttackActionBase
 
             // Wait until head faces target enough (or timeout)
             float faceEnd = Time.time + faceTimeout;
-            bool aligned = false;
+            //bool aligned = false;
             while (Time.time < faceEnd)
             {
                 if (target == null || !target.IsSpawned) break;
@@ -113,7 +113,7 @@ public class SnakeMouthOrbBarrageAction : AttackActionBase
                         float dot = Vector3.Dot(head.forward, to.normalized);
                         if (dot >= faceDot)
                         {
-                            aligned = true;
+                            //aligned = true;
                             break;
                         }
                     }

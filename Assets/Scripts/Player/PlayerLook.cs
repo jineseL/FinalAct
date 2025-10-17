@@ -35,7 +35,8 @@ public class PlayerLook: NetworkBehaviour
             }
         }
         // Local owner: lock cursor for FPS
-        SetFpsCursor(true);
+        //uncomment if not testing
+       // SetFpsCursor(true);
     }
     public override void OnNetworkDespawn()
     {

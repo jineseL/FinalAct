@@ -88,7 +88,6 @@ public class LanBroadcastClient : MonoBehaviour
             {
                 byte[] data = udpClient.Receive(ref endPoint); // blocking
                 string message = Encoding.UTF8.GetString(data);
-                Debug.Log("abc");
                 if (message.StartsWith("GameLobby:"))
                 {
                     // parse port

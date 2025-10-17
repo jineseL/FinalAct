@@ -9,6 +9,7 @@ public class Weapons : NetworkBehaviour
     public bool isReloading;
     public int weaponIndex; // on the player
     public int currentAmmoCount;
+    public int altFireAmmoConsume; //amount of ammo to use in altFire
     public PlayerManager owner { private set; get; }
 
     public GameObject fpsGun;
@@ -25,7 +26,10 @@ public class Weapons : NetworkBehaviour
 
     public void ResetReloading() { isReloading = false; }
 
+    // left click
     public virtual void Fire() { }
+    //right click
+    public virtual void AltFire() { }
     public virtual void Reload() { }
 
     /// <summary>

@@ -75,13 +75,12 @@ public class SoundManager : MonoBehaviour
         if (I.sfxDict.TryGetValue(key, out var clip))
             I.Play2D(clip, volume, pitch);
     }
-
+    //local only
     public static void PlaySfxAt(AudioClip clip, Vector3 position, float volume = 1f, float pitch = 1f, float spatialBlend = 1f, float minDistance = 1f, float maxDistance = 25f)
     {
         if (I == null || clip == null) return;
         I.Play3D(clip, position, volume, pitch, spatialBlend, minDistance, maxDistance);
     }
-
     public static void PlaySfxAt(string key, Vector3 position, float volume = 1f, float pitch = 1f, float spatialBlend = 1f, float minDistance = 1f, float maxDistance = 25f)
     {
         if (I == null || I.sfxDict == null) return;

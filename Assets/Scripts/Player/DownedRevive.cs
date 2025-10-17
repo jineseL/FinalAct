@@ -38,6 +38,7 @@ public class DownedRevive : NetworkBehaviour, IInteractable
         if (Vector3.Distance(interactor.transform.position, transform.position) > interactRange)
             return;
         // begin revive hold
+        Debug.Log("interacting");
         health.ServerBeginRevive(interactor);
     }
 

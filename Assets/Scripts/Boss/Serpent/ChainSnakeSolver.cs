@@ -186,7 +186,7 @@ public class ChainSnakeSolver : MonoBehaviour
                 // Current raw direction from parent to this segment
                 Vector3 rawDir = (seg.position - prevPos);
                 if (rawDir.sqrMagnitude < 1e-6f) rawDir = prevDir; // fallback
-                rawDir.Normalize();
+                rawDir.Normalize();//direction vector 
 
                 // Clamp bend angle
                 float maxRad = maxBendAngleDeg * Mathf.Deg2Rad;

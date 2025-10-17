@@ -17,6 +17,7 @@ public class PlayerMotor : MonoBehaviour
     public float dashSpeed = 20f;
     public float dashDuration = 0.15f;
     public float dashCooldown = 1f;
+    public bool canDash = true;
 
     private bool isDashing = false;
     private float dashTimer = 0f;
@@ -27,6 +28,7 @@ public class PlayerMotor : MonoBehaviour
     [Header("Jump Settings")]
     public int maxJumps = 2;   // number of jumps allowed (2 = double jump)
     private int jumpCount = 0; // how many jumps have been used
+    public bool canJump = true;
 
     [Header("External Force Lock")]
     [SerializeField] private bool blockNewExternalForces = false; // inspector toggle
@@ -38,6 +40,7 @@ public class PlayerMotor : MonoBehaviour
     private Vector3 persistentVel;       // current persistent velocity (e.g., blackhole)
     private Vector3 persistentTargetVel; // desired persistent velocity set by effects each frame
     public bool IsExternalForceLocked => blockNewExternalForces && Time.time < externalForceLockUntil;
+    public bool canExternalForceApplied = true;
 
     [Header("Footsteps")]
     [SerializeField] private string[] footstepKeys;  // keys from SoundManager.sfxTable (e.g., "step1","step2")
@@ -89,6 +92,7 @@ public class PlayerMotor : MonoBehaviour
     public void ApplyExternalForce(Vector3 forceVelocity)
     {
         // Ignore new external forces while locked
+        if (!canExternalForceApplied) return;
         if (IsExternalForceLocked) return;
 
         externalForce = Vector3.ClampMagnitude(externalForce + forceVelocity, maxExternalSpeed);
@@ -167,7 +171,7 @@ public class PlayerMotor : MonoBehaviour
 
     public void Jump()
     {
-        if (jumpCount < maxJumps)
+        if (jumpCount < maxJumps && canJump)
         {
             playerVelocity.y = Mathf.Sqrt(jumpHeight * -3.0f * gravity);
             jumpCount++;
@@ -197,8 +201,11 @@ public class PlayerMotor : MonoBehaviour
         if (dashTimer > 0f)
         {
             // Dash speed ignores slow by design; change to (dashSpeed * moveFactor) if you want slow to affect dash
-            controller.Move(dashDirection * dashSpeed * Time.deltaTime);
-            dashTimer -= Time.deltaTime;
+            if (canDash)
+            {
+                controller.Move(dashDirection * dashSpeed * Time.deltaTime);
+                dashTimer -= Time.deltaTime;
+            }
         }
         else
         {

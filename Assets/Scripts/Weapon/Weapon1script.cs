@@ -1,5 +1,6 @@
 using UnityEngine;
 using Unity.Netcode;
+using System.Linq;
 
 public class Weapon1script : Weapons
 {
@@ -9,23 +10,32 @@ public class Weapon1script : Weapons
     public float blastRadius = 5f;
     public float blastLifetime = 0.12f;
     public float playerKnockbackForce = 25f;
-    public float enemyDamage = 25f;
+    public float enemyDamage = 25f; // you said you'll remove enemy damage from BlastAoE yourself
     public float selfRecoilForce = 18f;
+
+    [Header("Pellet Settings")]
+    [SerializeField] private NetworkObject pelletPrefab;      // prefab with NetworkObject + ShotgunPelletProjectile
+    [SerializeField] private int pelletCount = 8;             // pellets per shot
+    [SerializeField] private float spreadAngleDeg = 7f;       // shotgun cone half-angle
+    [SerializeField] private float pelletSpeed = 60f;         // m/s
+    [SerializeField] private float pelletLifetime = 1.2f;     // s
+    [SerializeField] private float damageNear = 22f;          // damage at 0..falloffStart
+    [SerializeField] private float damageFar = 6f;            // damage at falloffEnd+
+    [SerializeField] private float falloffStart = 5f;         // meters
+    [SerializeField] private float falloffEnd = 25f;          // meters
+    [SerializeField] private LayerMask pelletHitMask;         // layers pellets can hit (ENEMIES / WORLD) — DO NOT pass via RPC
 
     [Header("Fps View")]
     public Transform FpsShootPoint1;
     public Transform FpsShootPoint2;
     public GameObject ShootVFX1;
 
-    // internal: track whether we should auto-reload after the shot anim ends
     private bool autoReloadPending = false;
 
     public override void Fire()
     {
-        // block when attacking or reloading
         if (isAttacking || isReloading) return;
 
-        // no ammo? start reload
         if (currentAmmoCount <= 0)
         {
             BeginReload();
@@ -39,71 +49,96 @@ public class Weapon1script : Weapons
 
         // local FP feedback (muzzle, anim)
         FpsFire();
+        FpsFireServerRpc();
 
-        // world effect (server AoE)
+        // recoil for the owner
         WorldFire();
 
-        // if that was the last shell, schedule an auto-reload to run when the
-        // firing animation finishes (via animation event)
-        autoReloadPending = (currentAmmoCount == 0);
+        autoReloadPending = (currentAmmoCount <= 0);
     }
 
-    public override void Reload()
+    public override void AltFire()
     {
-        // manual reload (from input)
-        BeginReload();
+        if (isAttacking || isReloading) return;
+
+        if (currentAmmoCount <= 0)
+        {
+            BeginReload();
+            return;
+        }
+        if (currentAmmoCount <= altFireAmmoConsume)
+        {
+            return;
+        }
+
+        isAttacking = true;
+
+        currentAmmoCount = Mathf.Max(0, currentAmmoCount - altFireAmmoConsume);
+
+        AltFpsFire();
+        AltWorldFire();
+
+        autoReloadPending = (currentAmmoCount <= 0);
     }
+
+    public override void Reload() => BeginReload();
 
     private void BeginReload()
     {
         if (isReloading) return;
         if (currentAmmoCount >= maxAmmo) return;
-        if (isAttacking) { autoReloadPending = true; return; } // wait until shot anim ends
+        if (isAttacking) { autoReloadPending = true; return; }
 
         isReloading = true;
-
-        // trigger reload animation; hook Animation Events:
-        //  - AE_ReloadCommit() at the point the shells are inserted
-        //  - AE_ReloadFinished() at the end
         if (fpsAnimator) fpsAnimator.Play("FpsDoubleBarrelReload");
     }
 
-    /// <summary>
-    /// Animation Event: called at the moment ammo should refill.
-    /// </summary>
     public override void AE_ReloadCommit()
     {
-        // ammo is owner-authoritative in this prototype (fastest)
         currentAmmoCount = maxAmmo;
     }
 
-    /// <summary>
-    /// Animation Event: called at the end of reload anim.
-    /// </summary>
     public override void AE_ReloadFinished()
     {
         isReloading = false;
-        autoReloadPending = false; // clear any pending
+        autoReloadPending = false;
     }
 
     public override void TryAutoReloadAfterShot()
     {
-        // Called by your animation-event handler after it calls ResetAttacking()
         if (autoReloadPending && !isReloading)
         {
-            autoReloadPending = false; // we’re acting on it now
+            autoReloadPending = false;
             BeginReload();
         }
     }
 
-    // ===== existing firing pieces =====
+    // ===== firing =====
 
     public void WorldFire()
     {
         if (!IsOwner) return;
 
         ApplySelfRecoilLocal();
+
+        // keep your knockback AoE for players
         SpawnBlastServerRpc(firePoint.position, firePoint.forward);
+
+        // spawn actual pellets (server only)
+        SpawnPelletsServerRpc(firePoint.position, firePoint.rotation);
+    }
+
+    public void AltWorldFire()
+    {
+        if (!IsOwner) return;
+
+        ApplySelfRecoilLocal();
+
+        // You said ignore altfire for now, but this keeps parity
+        SpawnBlastServerRpc(firePoint.position, firePoint.forward);
+
+        // You can also spawn pellets here if alt-fire should shoot as well
+        // SpawnPelletsServerRpc(...);
     }
 
     private void ApplySelfRecoilLocal()
@@ -123,16 +158,68 @@ public class Weapon1script : Weapons
         aoe.Activate();
     }
 
+    [ServerRpc]
+    private void SpawnPelletsServerRpc(Vector3 origin, Quaternion rot)
+    {
+        if (!pelletPrefab) return;
+
+        for (int i = 0; i < pelletCount; i++)
+        {
+            // random cone in local space
+            Vector2 r = Random.insideUnitCircle;           // uniform disc
+            float yaw = r.x * spreadAngleDeg;              // left/right
+            float pitch = -r.y * spreadAngleDeg;           // up/down (neg for typical view)
+            Quaternion pelletRot = rot * Quaternion.Euler(pitch, yaw, 0f);
+
+            var no = Instantiate(pelletPrefab, origin, pelletRot);
+            var proj = no.GetComponent<ShotgunPelletProjectile>();
+            if (proj != null)
+            {
+                proj.SetParams(
+                    speed: pelletSpeed,
+                    lifetime: pelletLifetime,
+                    damageNear: damageNear,
+                    damageFar: damageFar,
+                    falloffStart: falloffStart,
+                    falloffEnd: falloffEnd,
+                    hitMask: pelletHitMask,
+                    shooterClientId: OwnerClientId
+                );
+            }
+
+            no.Spawn(true);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = true)]
+    private void FpsFireServerRpc()
+    {
+        var others = NetworkManager.Singleton.ConnectedClientsIds.Where(id => id != OwnerClientId).ToArray();
+        FpsFireClientRpc(new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = others } });
+    }
+
+    [ClientRpc]
+    private void FpsFireClientRpc(ClientRpcParams rpcParams = default) => FpsFire();
+
     public void FpsFire()
     {
         if (fpsAnimator) fpsAnimator.Play("FpsDoubleBarrelFiring");
         SoundManager.PlaySfxAt("DoubleBarrelSFX", FpsShootPoint1.position, 0.8f, 1);
-        if (currentAmmoCount % 2 == 0) //Instantiate(ShootVFX1, firePoint);
-        Instantiate(ShootVFX1, FpsShootPoint1.position, FpsShootPoint1.rotation);
-        else //Instantiate(ShootVFX1, firePoint);
-        Instantiate(ShootVFX1, FpsShootPoint2.position, FpsShootPoint2.rotation);
-        
-        // TODO: SFX
+
+        if (currentAmmoCount % 2 == 0)
+            Instantiate(ShootVFX1, FpsShootPoint1.position, Quaternion.LookRotation(FpsShootPoint1.forward, Vector3.forward));
+        else
+            Instantiate(ShootVFX1, FpsShootPoint2.position, Quaternion.LookRotation(FpsShootPoint2.forward, Vector3.forward));
+    }
+
+    public void AltFpsFire()
+    {
+        if (fpsAnimator) fpsAnimator.Play("FpsDoubleBarrelFiring");
+        SoundManager.PlaySfxAt("DoubleBarrelSFX", FpsShootPoint1.position, 0.8f, 1);
+
+        if (currentAmmoCount % 2 == 0)
+            Instantiate(ShootVFX1, FpsShootPoint1.position, Quaternion.LookRotation(FpsShootPoint1.forward, Vector3.forward));
+        else
+            Instantiate(ShootVFX1, FpsShootPoint2.position, Quaternion.LookRotation(FpsShootPoint2.forward, Vector3.forward));
     }
 }
-

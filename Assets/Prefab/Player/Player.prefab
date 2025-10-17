@@ -137,13 +137,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 236318590800589035}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0.76604444, y: 0, z: 0, w: 0.64278764}
   m_LocalPosition: {x: -0.22799942, y: -1.0983129, z: 0.052874073}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1221004588242697575}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 100, y: 0, z: 0}
 --- !u!1 &476940082412380889
 GameObject:
   m_ObjectHideFlags: 0
@@ -1352,6 +1352,7 @@ MonoBehaviour:
   isReloading: 0
   weaponIndex: 0
   currentAmmoCount: 0
+  altFireAmmoConsume: 0
   fpsGun: {fileID: 5841360160839805286}
   fpsAnimator: {fileID: 1827416655987269989}
   blastAoePrefab: {fileID: 429031799320608045, guid: 0589e1126163c874b94e70f821660f67, type: 3}
@@ -1361,9 +1362,21 @@ MonoBehaviour:
   playerKnockbackForce: 70
   enemyDamage: 25
   selfRecoilForce: 50
+  pelletPrefab: {fileID: 7613724721944045910, guid: 7ef8a18b8b6568c4ab362421e57f3956, type: 3}
+  pelletCount: 10
+  spreadAngleDeg: 20
+  pelletSpeed: 80
+  pelletLifetime: 1.2
+  damageNear: 8
+  damageFar: 2
+  falloffStart: 10
+  falloffEnd: 30
+  pelletHitMask:
+    serializedVersion: 2
+    m_Bits: 3072
   FpsShootPoint1: {fileID: 4424038896663582906}
   FpsShootPoint2: {fileID: 400436738202622484}
-  ShootVFX1: {fileID: 7658744058932303410, guid: 00bcfb2c1c5a64c4abbc0ed6e84220f5, type: 3}
+  ShootVFX1: {fileID: 2504214343621411470, guid: 3795e13dff3c6a54eaba0dfa3766fa6c, type: 3}
 --- !u!1 &6049468253352188099
 GameObject:
   m_ObjectHideFlags: 0
@@ -1940,7 +1953,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 3529867877
+  GlobalObjectIdHash: 3062573137
   InScenePlacedSourceGlobalObjectIdHash: 3062573137
   DeferredDespawnTick: 0
   Ownership: 1
@@ -2018,10 +2031,13 @@ MonoBehaviour:
   dashSpeed: 30
   dashDuration: 0.15
   dashCooldown: 0.5
+  canDash: 1
   maxJumps: 2
+  canJump: 1
   blockNewExternalForces: 0
   persistentAccel: 30
   persistentMaxSpeed: 15
+  canExternalForceApplied: 1
   footstepKeys: []
   stepDistance: 1.5
   minStepInterval: 0.22
@@ -2116,10 +2132,11 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   maxHealth: 100
   invulnerableTime: 1
-  downedBleedoutTime: 60
+  downedBleedoutTime: 5
   reviveTime: 1
   reviveHpPct: 0.5
-  fakeDeathHpPct: 0.25
+  fakeDeathHpPct: 0.5
+  slowFactorWhenDowned: 0.1
   DieText: {fileID: 1762950447120721643}
 --- !u!114 &4862065180573276555
 MonoBehaviour:
@@ -2209,13 +2226,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7154119899911246991}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0.76604444, y: 0, z: 0, w: 0.64278764}
   m_LocalPosition: {x: 0.16900091, y: -1.1166801, z: 0.003117459}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1221004588242697575}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 100, y: 0, z: 0}
 --- !u!1 &7198707421513881240
 GameObject:
   m_ObjectHideFlags: 0

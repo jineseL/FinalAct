@@ -37,19 +37,34 @@ public class SnakeUtilityAi : NetworkBehaviour
         if (!IsServer) return;
         active = false;
     }
+    private bool AnyActionBusy()
+    {
+        for (int i = 0; i < actions.Count; i++)
+        {
+            var a = actions[i];
+            if (a != null && a.IsBusy) return true;
+        }
+        return false;
+    }
 
     private void Update()
     {
         if (!IsServer || !active || controller == null) return;
 
+        // Do not think while any action is in progress
+        if (AnyActionBusy())
+        {
+            thinkTimer = thinkInterval;
+            return;
+        }
+
         thinkTimer -= Time.deltaTime;
         if (thinkTimer > 0f) return;
         thinkTimer = thinkInterval;
-        //think
+
         BossContext ctx = controller.BuildContext();
 
         const float EPS = 1e-4f;
-
         float bestScore = -1f;
         List<AttackActionBase> candidates = new();
 

@@ -29,7 +29,9 @@ public class PlayerHealth : NetworkBehaviour
     [SerializeField] private float reviveTime = 3f;          // hold E duration
     [SerializeField] private float reviveHpPct = 0.5f;       // 50% HP when revived
     [SerializeField] private float fakeDeathHpPct = 0.25f;   // 25% HP when no revive
-
+    [SerializeField] private float slowFactorWhenDowned = 0.1f;
+    PlayerMotor motor;
+    PlayerWeaponManager weaponManager;
     // everyone reads, server writes
     private NetworkVariable<bool> isDownedNV = new NetworkVariable<bool>(
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
@@ -95,16 +97,38 @@ public class PlayerHealth : NetworkBehaviour
     private void SetDownedPresentation(bool down)
     {
         // Disable owner input + show red overlay
-        InputManager input = GetComponentInChildren<InputManager>(true);
-        if (input) input.enabled = !down;
+        /*InputManager input = GetComponentInChildren<InputManager>(true);
+        if (input) input.enabled = !down;*/
 
         // Freeze movement a bit more if you want:
-        PlayerMotor motor = GetComponent<PlayerMotor>();
-        if (motor) motor.ClearSlow(); // optional
+        if(motor ==null) motor = GetComponent<PlayerMotor>();
+        if (weaponManager == null) weaponManager = GetComponent<PlayerWeaponManager>();
+
+        //disbale things when down
+        motor.canJump = !down; //no jump
+        motor.canDash = !down; //no dashing
+        motor.canExternalForceApplied = !down; //force cant be applied, might change in the future
+        if (weaponManager && weaponManager.currentWeapon) weaponManager.currentWeapon.gameObject.SetActive(!down);
+
+        //can can still move abit
+        if (motor && down)
+        {
+            //slow the player forever when they down
+            motor.ApplySlow(slowFactorWhenDowned, 999f);
+        }
+
+        else if (motor && !down)
+        {
+            motor.ClearSlow();
+        } 
+
+
+        /*if (motor) motor.ClearSlow(); // optional*/
         // Red overlay (if you have a HUD)
         PlayerHUD hud = GetComponentInChildren<PlayerHUD>(true);
         if (hud) hud.SetDownedOverlay(down); // implement SetDownedOverlay(bool) in your HUD
     }
+
     private void OnHealthChanged(int oldValue, int newValue)
     {
         if (newValue <= 0)
@@ -358,7 +382,7 @@ public class PlayerHealth : NetworkBehaviour
     {
         if (!IsServer || !IsDowned || helper == null) return;
         if (reviveRoutine != null) return;
-
+        Debug.Log($"[Server] BeginRevive: helper={helper.name} target={name}");
         reviveRoutine = StartCoroutine(ReviveHold(helper));
     }
 
@@ -366,6 +390,7 @@ public class PlayerHealth : NetworkBehaviour
     public void ServerCancelRevive(GameObject helper)
     {
         if (!IsServer) return;
+        Debug.Log("[Server] CancelRevive");
         if (reviveRoutine != null)
         {
             StopCoroutine(reviveRoutine);
@@ -376,6 +401,7 @@ public class PlayerHealth : NetworkBehaviour
 
     private IEnumerator ReviveHold(GameObject helper)
     {
+        Debug.Log("[Server] ReviveHold start");
         float started = Time.time;
         reviveProgressNV.Value = 0f;
 
@@ -397,14 +423,15 @@ public class PlayerHealth : NetworkBehaviour
         // Downed flag flipped off while we were reviving (revived by someone else or fake-death)
         if (!IsDowned) yield break;
 
-        if (reviveProgressNV.Value >= 0.999f)
+        if (IsDowned)
         {
-            ServerRevive(reviveHpPct);
-            yield break;
+            reviveProgressNV.Value = Mathf.Clamp01((Time.time - started) / reviveTime); // ensures 1.0 at end
+            if (reviveProgressNV.Value >= 0.999f)
+                ServerRevive(reviveHpPct);
+            else
+                reviveProgressNV.Value = 0f;
         }
-
-        // failed -> reset progress
-        reviveProgressNV.Value = 0f;
+        Debug.Log($"[Server] ReviveHold end. progress={reviveProgressNV.Value:F3}, IsDowned={IsDowned}");
     }
 
 
@@ -414,7 +441,6 @@ public class PlayerHealth : NetworkBehaviour
 
         // stop bleedout
         if (bleedoutRoutine != null) { StopCoroutine(bleedoutRoutine); bleedoutRoutine = null; }
-
         isDownedNV.Value = false;
         reviveProgressNV.Value = 0f;
 
@@ -422,6 +448,7 @@ public class PlayerHealth : NetworkBehaviour
         int hp = Mathf.Max(1, Mathf.RoundToInt(maxHealth * Mathf.Clamp01(hpPct)));
         currentHealth.Value = Mathf.Clamp(hp, 1, maxHealth);
         SetInvulnerable(invulnerableTime);
+        Debug.Log("[Server] ServerRevive()");
     }
 
     private void ServerFakeRespawn(float hpPct)
