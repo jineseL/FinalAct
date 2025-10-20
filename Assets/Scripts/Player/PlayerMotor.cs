@@ -11,7 +11,7 @@ public class PlayerMotor : MonoBehaviour
     public float speed = 5f;                 // base speed
     public float gravity = -9.8f;
     public float jumpHeight = 1.5f;
-    public float maxExternalSpeed = 50f;     // for external force (knockback/pull)
+    public float maxExternalSpeed = 1000f;     // for external force (knockback/pull)
 
     [Header("Dash Settings")]
     public float dashSpeed = 20f;

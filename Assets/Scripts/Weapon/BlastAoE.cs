@@ -14,7 +14,8 @@ public class BlastAoE : NetworkBehaviour
     private float radius;
     private float life;
     private float playerForce;
-    private float enemyDamage;
+    //private float enemyDamage;
+    private Vector3 shootPoint;
 
     private HashSet<ulong> affected = new(); // prevent double application
 
@@ -23,13 +24,14 @@ public class BlastAoE : NetworkBehaviour
     private static int PropLayer;
     private static int EnemyLayer;
 
-    public void Configure(NetworkObject shooterNo, float r, float l, float pForce, float dmg)
+    public void Configure(NetworkObject shooterNo, float r, float l, float pForce, float dmg, Vector3 ShootPoint)
     {
         shooterRef = shooterNo;
         radius = r;
         life = l;
         playerForce = pForce;
-        enemyDamage = dmg;
+        //enemyDamage = dmg;
+        shootPoint = ShootPoint;
     }
     private void Awake()
     {
@@ -78,8 +80,8 @@ public class BlastAoE : NetworkBehaviour
             var motor = other.GetComponentInParent<PlayerMotor>();
             if (motor != null)
             {
-                Vector3 dir = (other.transform.position - transform.position).normalized;
-                Vector3 force = dir * playerForce;
+                Vector3 dir = (other.transform.position - shootPoint).normalized;
+                Vector3 force = dir *(radius*2 -Vector3.Distance(other.transform.position, shootPoint)) * playerForce;
 
                 motor.ApplyExternalForce(force);
 
@@ -98,13 +100,12 @@ public class BlastAoE : NetworkBehaviour
             var prop = other.GetComponent<NetworkedProp>();
             if (prop != null)
             {
-                Vector3 dir = (other.ClosestPoint(transform.position) - transform.position).normalized;
-                if (dir.sqrMagnitude < 0.001f) dir = (other.transform.position - transform.position).normalized;
+                Vector3 dir = (other.ClosestPoint(transform.position) - shootPoint).normalized;
+                if (dir.sqrMagnitude < 0.001f) dir = (other.transform.position - shootPoint).normalized;
 
-                float propImpulse = playerForce * 0.8f; // tweak separate from playerForce if you want
-                Vector3 impulse = dir * propImpulse;
-
-                Vector3 hitPoint = other.ClosestPoint(transform.position);
+                float propImpulse = playerForce * 0.5f; // tweak separate from playerForce
+                Vector3 impulse = dir * (radius * 2 - Vector3.Distance(other.transform.position, shootPoint)) * propImpulse;
+                Vector3 hitPoint = other.ClosestPoint(shootPoint);
                 prop.ApplyImpulse(impulse, hitPoint);
             }
             return;
@@ -123,7 +124,7 @@ public class BlastAoE : NetworkBehaviour
             }
         }*/
 
-        // anything else: ignore or custom behavior
+        
     }
 
     [ClientRpc]

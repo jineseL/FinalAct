@@ -86,7 +86,6 @@ public class ShotgunPelletProjectile : NetworkBehaviour
         // Only react to layers we care about
         if ((hitMask.value & (1 << other.gameObject.layer)) == 0)
             return;
-        Debug.Log("test");
         // Compute falloff damage based on traveled distance
         float dmg = ComputeFalloffDamage(traveled, damageNear, damageFar, falloffStart, falloffEnd);
 
@@ -159,7 +158,6 @@ public class ShotgunPelletProjectile : NetworkBehaviour
         // Oriented smoke/spark: local up aligned to surface normal
         if (groundHitVfx)
         {
-            Debug.Log("spawned");
             Quaternion vfxRot = Quaternion.FromToRotation(Vector3.up, normal);
             var vfx = Object.Instantiate(groundHitVfx, pos, vfxRot);
             if (vfxLifetime > 0f) Object.Destroy(vfx, vfxLifetime);

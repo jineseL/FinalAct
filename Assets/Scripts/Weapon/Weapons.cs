@@ -22,7 +22,7 @@ public class Weapons : NetworkBehaviour
         currentAmmoCount = maxAmmo;
     }
 
-    public void ResetAttacking() { isAttacking = false; }
+    public void ResetAttacking() { if(isAttacking) isAttacking = false; }
 
     public void ResetReloading() { isReloading = false; }
 

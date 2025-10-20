@@ -113,6 +113,38 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &204296468545799637
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5591754898169414407}
+  m_Layer: 8
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5591754898169414407
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 204296468545799637}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 8514828037771370211}
+  m_Father: {fileID: 1603626809034364637}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &236318590800589035
 GameObject:
   m_ObjectHideFlags: 0
@@ -246,11 +278,11 @@ Transform:
   m_GameObject: {fileID: 609460848942889315}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.012, z: 0}
+  m_LocalPosition: {x: 0, y: 0.025, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1603626809034364637}
+  m_Father: {fileID: 5591754898169414407}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &241472148515660810
 MonoBehaviour:
@@ -276,7 +308,7 @@ MonoBehaviour:
     LookAtTarget: {fileID: 0}
     CustomLookAtTarget: 0
   Lens:
-    FieldOfView: 64
+    FieldOfView: 68
     OrthographicSize: 10
     NearClipPlane: 0.1
     FarClipPlane: 5000
@@ -1144,7 +1176,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 4490267405741577735}
-  - {fileID: 8514828037771370211}
+  - {fileID: 5591754898169414407}
   m_Father: {fileID: 7332627162761308408}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!95 &1827416655987269989
@@ -1347,7 +1379,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   weaponName: Double Barrel
   damage: 50
-  maxAmmo: 2
+  maxAmmo: 4
   isAttacking: 0
   isReloading: 0
   weaponIndex: 0
@@ -1357,10 +1389,9 @@ MonoBehaviour:
   fpsAnimator: {fileID: 1827416655987269989}
   blastAoePrefab: {fileID: 429031799320608045, guid: 0589e1126163c874b94e70f821660f67, type: 3}
   firePoint: {fileID: 5027316355925029089}
-  blastRadius: 5
+  blastRadius: 4
   blastLifetime: 0.12
   playerKnockbackForce: 70
-  enemyDamage: 25
   selfRecoilForce: 50
   pelletPrefab: {fileID: 7613724721944045910, guid: 7ef8a18b8b6568c4ab362421e57f3956, type: 3}
   pelletCount: 10
@@ -1374,6 +1405,11 @@ MonoBehaviour:
   pelletHitMask:
     serializedVersion: 2
     m_Bits: 3072
+  blendSeconds: 0.08
+  primaryCooldown: 0.35
+  altCooldown: 0.5
+  altForceMultiplier: 0.9
+  altRadiusMultiplier: 0.7
   FpsShootPoint1: {fileID: 4424038896663582906}
   FpsShootPoint2: {fileID: 400436738202622484}
   ShootVFX1: {fileID: 2504214343621411470, guid: 3795e13dff3c6a54eaba0dfa3766fa6c, type: 3}
@@ -1906,6 +1942,7 @@ GameObject:
   - component: {fileID: 3818470675066331645}
   - component: {fileID: 7105877491740406986}
   - component: {fileID: 9002131827438197566}
+  - component: {fileID: 6991034908523228982}
   - component: {fileID: 8674393265990592655}
   - component: {fileID: 9110666006173063790}
   - component: {fileID: 1698635039752954549}
@@ -2027,7 +2064,7 @@ MonoBehaviour:
   speed: 7.5
   gravity: -15
   jumpHeight: 1.5
-  maxExternalSpeed: 50
+  maxExternalSpeed: 500
   dashSpeed: 30
   dashDuration: 0.15
   dashCooldown: 0.5
@@ -2046,6 +2083,59 @@ MonoBehaviour:
   stepSpatialBlend: 0
   stepMinDistance: 1
   stepMaxDistance: 20
+--- !u!114 &6991034908523228982
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7117260090388492212}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4dc144c49ee8a3c4a869303dd8b0df7a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCameraShake
+  ShowTopMostFoldoutHeaderGroup: 1
+  cameraRig: {fileID: 5591754898169414407}
+  small:
+    duration: 0.15
+    posAmplitude: 0.04
+    rotAmplitude: 1.2
+    frequency: 22
+  medium:
+    duration: 0.15
+    posAmplitude: 0.05
+    rotAmplitude: 1.5
+    frequency: 20
+  hard:
+    duration: 0.26
+    posAmplitude: 0.08
+    rotAmplitude: 2.2
+    frequency: 18
+  damping:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!114 &8674393265990592655
 MonoBehaviour:
   m_ObjectHideFlags: 0
