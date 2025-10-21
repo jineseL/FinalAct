@@ -141,7 +141,7 @@ public class PlayerHealth : NetworkBehaviour
     /// Server-side direct damage (preferred for boss/AoE/weapon hits).
     /// no knockback version of taking damage
     /// </summary>
-    public void ApplyDamage(int amount, ulong attackerClientId = ulong.MaxValue)
+    public void ApplyDamage(int amount/*, ulong attackerClientId = ulong.MaxValue*/)
     {
         if (!IsServer || !IsAlive) return;
         if (isInvulnerable) return;

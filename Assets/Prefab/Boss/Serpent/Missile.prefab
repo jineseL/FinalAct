@@ -276,11 +276,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SnakeHomingMissile
   ShowTopMostFoldoutHeaderGroup: 1
-  initialSpeed: 25
-  speedDecayDuration: 0.2
-  targetSpeed: 20
+  initialSpeed: 13
+  speedDecayDuration: 1.2
+  targetSpeed: 23
   speed: 13
-  rotateDegPerSec: 140
+  rotateDegPerSec: 220
   lifeRemaining: 10
   forwardRemaining: 4
   lockOnDot: 1
