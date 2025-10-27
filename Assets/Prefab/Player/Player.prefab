@@ -1990,7 +1990,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 3529867877
+  GlobalObjectIdHash: 3062573137
   InScenePlacedSourceGlobalObjectIdHash: 3062573137
   DeferredDespawnTick: 0
   Ownership: 1
@@ -2220,7 +2220,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
   ShowTopMostFoldoutHeaderGroup: 1
-  maxHealth: 100
+  maxHealth: 1000
   invulnerableTime: 1
   downedBleedoutTime: 5
   reviveTime: 1
@@ -3435,6 +3435,10 @@ PrefabInstance:
     - target: {fileID: 2020124333004623384, guid: e7c4be108a932c94389925c24c51328a, type: 3}
       propertyPath: m_Layer
       value: 8
+      objectReference: {fileID: 0}
+    - target: {fileID: 2020124333004623384, guid: e7c4be108a932c94389925c24c51328a, type: 3}
+      propertyPath: m_IsActive
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2296393078715663276, guid: e7c4be108a932c94389925c24c51328a, type: 3}
       propertyPath: m_Layer

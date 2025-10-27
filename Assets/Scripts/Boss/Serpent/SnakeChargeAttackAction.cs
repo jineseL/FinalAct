@@ -53,6 +53,24 @@ public class SnakeChargeAttackAction : AttackActionBase
     [Header("Scoring")]
     [SerializeField, Range(0f, 1f)] private float baseScore = 1f;
 
+    [Header("Chaining")]
+    [SerializeField] private bool chainRelocateOnFinish = true;
+
+    [Header("Grounded Gate")]
+    [SerializeField] private bool requireTargetGroundedToCharge = true;
+
+    // 0 = wait indefinitely until grounded. Otherwise cap the wait.
+    [SerializeField] private float waitGroundedMax = 0f;
+
+    // Grounded probe (server-side) — if you don't trust CharacterController.isGrounded.
+    // Usually set this to your Ground layers (can reuse aimMask if they're identical).
+    [SerializeField] private LayerMask groundedMask;
+
+    // Small probe to check if the target is on/near the ground.
+    [SerializeField] private float groundedProbeRadius = 0.25f;
+    [SerializeField] private float groundedProbeDistance = 0.4f;
+
+
     // runtime
     private NetworkObject targetNo;
     private static Material s_sharedLaserMat; // one shared unlit material per client
@@ -95,7 +113,7 @@ public class SnakeChargeAttackAction : AttackActionBase
         targetNo = PickRandomTarget();
         if (!targetNo || !targetNo.IsSpawned)
         {
-            CleanupAndFinish();
+            CleanupAndFinish(true);
             return;
         }
 
@@ -109,29 +127,28 @@ public class SnakeChargeAttackAction : AttackActionBase
     {
         if (!controller || !controller.Head)
         {
-            CleanupAndFinish();
+            CleanupAndFinish(false);
             yield break;
         }
 
-        // Laser is active for the entire move.
+        // Laser stays on for the move until we explicitly turn it off.
         SetLaserActiveAllClients(true, laserWidth, laserColor, targetNo.NetworkObjectId, laserAimAtTarget);
 
         for (int i = 0; i < Mathf.Max(1, cycles); i++)
         {
             bool lastCycle = (i == cycles - 1);
 
-            // Ensure no override blocks chasing; allow normal steering visuals during tracking.
             controller.ClearAttackOverride();
             controller.SetSteeringSuppression(noSlither: false, noRoll: false);
 
-            // ---- 1) TRACK: chase slowly until facing player or timeout ----
+            // ---- 1) TRACK ----
             controller.SetSpeedImmediate(slowTrackSpeed);
             controller.BeginChase(targetNo, trackMaxTimeout + 0.6f);
 
             float elapsed = 0f;
             while (elapsed < trackMaxTimeout)
             {
-                if (!this || !controller || !controller.Head) { CleanupAndFinish(); yield break; }
+                if (!this || !controller || !controller.Head) { CleanupAndFinish(false); yield break; }
                 if (!targetNo || !targetNo.IsSpawned) break;
 
                 Vector3 to = targetNo.transform.position - controller.Head.position;
@@ -139,8 +156,6 @@ public class SnakeChargeAttackAction : AttackActionBase
                 {
                     to.Normalize();
                     float dot = Vector3.Dot(controller.Head.forward, to);
-
-                    // We require a minimum tracking time and sufficient facing.
                     if (elapsed >= trackMinTime && dot >= facingDotToCharge)
                         break;
                 }
@@ -148,22 +163,45 @@ public class SnakeChargeAttackAction : AttackActionBase
                 elapsed += Time.deltaTime;
                 yield return null;
             }
+            // ---- 1.5) WAIT FOR TARGET TO BE GROUNDED (pre-charge) ----
+            if (requireTargetGroundedToCharge)
+            {
+                float waited = 0f;
+                // Keep softly chasing while we wait (so head stays aligned).
+                // We’ll re-arm the chase window in small bites.
+                while (true)
+                {
+                    if (!this || !controller || !controller.Head) { CleanupAndFinish(false); yield break; }
+                    if (!targetNo || !targetNo.IsSpawned) break;
 
-            // ---- 2) LOCK CHARGE POINT from the laser muzzle ray ----
-            Vector3 chargePoint = ComputeLockPoint();
+                    bool grounded = IsTargetGrounded(targetNo.transform);
+                    if (grounded) break;
 
-            // Stop chasing and lock the aim. Suppress slither/roll for a stable heading.
+                    // optional cap
+                    if (waitGroundedMax > 0f && waited >= waitGroundedMax)
+                        break; // If you want to *never* charge when airborne, set waitGroundedMax=0 (infinite)
+
+                    // keep a tiny forward crawl & re-assert a short chase so we keep facing cleanly
+                    controller.SetSpeedImmediate(slowTrackSpeed);
+                    controller.BeginChase(targetNo, 0.2f); // extend facing a bit
+
+                    waited += Time.deltaTime;
+                    yield return null;
+                }
+            }
+
+            // ---- 2) LOCK CHARGE POINT ----
+            //Vector3 chargePoint = ComputeLockPoint();
+            Vector3 chargePoint = requireTargetGroundedToCharge ? ComputeGroundLockNearTarget(): ComputeLockPoint();
             controller.StopChase();
             controller.SetSteeringSuppression(noSlither: true, noRoll: true);
 
-            // Precompute charge time window (distance/speed + pad)
             float dist = Vector3.Distance(controller.Head.position, chargePoint);
             float chargeWindow = (dist / Mathf.Max(0.01f, chargeSpeed)) + chargeTimeoutPad;
 
-            // IMPORTANT: set the aim override BEFORE the pause so head keeps facing it.
             controller.SetAttackOverride(chargePoint, pauseDuration + chargeWindow + 0.3f);
 
-            // ---- 3) PAUSE: full stop for dramatic wind-up ----
+            // ---- 3) PAUSE ----
             controller.SetSpeedImmediate(0f);
             yield return new WaitForSeconds(pauseDuration);
 
@@ -171,36 +209,43 @@ public class SnakeChargeAttackAction : AttackActionBase
             controller.SetSpeedImmediate(chargeSpeed);
 
             float chargeDeadline = Time.time + chargeWindow + 0.3f;
+            //bool groundHit = false;
+
             while (controller.AttackOverrideActive && Time.time < chargeDeadline)
             {
-                if (!this || !controller || !controller.Head) { CleanupAndFinish(); yield break; }
+                if (!this || !controller || !controller.Head) { CleanupAndFinish(false); yield break; }
 
-                // Abort immediately if we reach the ground altitude.
                 if (controller.Head.position.y <= controller.GroundMinY + 0.02f)
                 {
                     controller.ClearAttackOverride();
-                    controller.SetSpeedImmediate(slowTrackSpeed);
+                    //groundHit = true;
+
+                    if (lastCycle)
+                    {
+                        // LAST CYCLE: stop instantly and turn off laser right away
+                        controller.SetSpeedImmediate(0f);
+                        LaserOffAllClients();
+                    }
+                    else
+                    {
+                        // mid cycles: recover with slow speed
+                        controller.SetSpeedImmediate(slowTrackSpeed);
+                    }
                     break;
                 }
 
                 yield return null;
             }
 
-            // ---- 5) RETURN TO ALTITUDE between cycles ----
+            // ---- 5) RETURN TO ALTITUDE ----
+            float targetY = returnAltitudeMarker.position.y;
             if (!lastCycle)
             {
-                // We want natural slither visuals during the climb back.
+                // Mid-cycle climb (unchanged)
                 controller.SetSteeringSuppression(noSlither: false, noRoll: false);
 
-                float targetY = returnAltitudeMarker.position.y;
-                Vector3 climbTo = new Vector3(
-                    controller.Head.position.x,
-                    targetY,
-                    controller.Head.position.z);
-
+                Vector3 climbTo = new Vector3(controller.Head.position.x, targetY, controller.Head.position.z);
                 controller.SetSpeedImmediate(returnClimbSpeed);
-
-                // USE VERTICAL ARRIVAL: requires SnakeBossController to support SetAttackOverride(pos, time, verticalY:true)
                 controller.SetAttackOverride(climbTo, returnTimeout, verticalY: true);
 
                 bool reachedY = false;
@@ -208,9 +253,8 @@ public class SnakeChargeAttackAction : AttackActionBase
 
                 while (Time.time < retDeadline)
                 {
-                    if (!this || !controller || !controller.Head) { CleanupAndFinish(); yield break; }
+                    if (!this || !controller || !controller.Head) { CleanupAndFinish(false); yield break; }
 
-                    // Y-only arrival test (same epsilon as we pass here)
                     if (controller.Head.position.y >= targetY)
                     {
                         reachedY = true;
@@ -218,27 +262,82 @@ public class SnakeChargeAttackAction : AttackActionBase
                         break;
                     }
 
-                    // If some other code cleared our override, re-assert it so we really reach Y.
                     if (!controller.AttackOverrideActive)
                         controller.SetAttackOverride(climbTo, 0.5f, verticalY: true);
+
                     yield return null;
                 }
 
                 if (!reachedY)
                 {
-                    // Could not restore altitude; safely finish the move.
-                    CleanupAndFinish();
+                    CleanupAndFinish(false);
                     yield break;
                 }
             }
+            else
+            {
+                // ===== LAST CYCLE: climb back to Y, then FACE+IDLE (no relocate) =====
+
+                // Ensure laser is off 
+                LaserOffAllClients();
+
+                controller.SetSteeringSuppression(noSlither: false, noRoll: false);
+
+                Vector3 climbTo = new Vector3(controller.Head.position.x, targetY, controller.Head.position.z);
+                // If we hit ground we already zeroed speed; now jump to climb speed for a crisp recovery
+                controller.SetSpeedImmediate(returnClimbSpeed);
+                controller.SetAttackOverride(climbTo, returnTimeout, verticalY: true);
+
+                float retDeadline = Time.time + returnTimeout + 0.25f;
+                while (Time.time < retDeadline)
+                {
+                    if (!this || !controller || !controller.Head) { CleanupAndFinish(false); yield break; }
+
+                    if (controller.Head.position.y >= targetY)
+                    {
+                        controller.ClearAttackOverride();
+                        break;
+                    }
+
+                    if (!controller.AttackOverrideActive)
+                        controller.SetAttackOverride(climbTo, 0.5f, verticalY: true);
+
+                    yield return null;
+                }
+
+                // Hand off directly to the controller's face to straighten to idle sequence
+                controller.BeginFaceThenIdle();
+
+                // Finish this action cleanly (no relocate)
+                SnakeUtilityAi.active = true; // re-arm AI; it will only think after idle ends
+                IsBusy = false;
+                yield break;
+            }
         }
 
-        // All cycles done.
-        CleanupAndFinish();
+        // Safety fallback (normally last cycle returns earlier)
+        CleanupAndFinish(false);
     }
 
-    // ===== Helpers =====
 
+
+    // ===== Helpers =====
+    private Vector3 ComputeGroundLockNearTarget()
+    {
+        var t = targetNo ? targetNo.transform : null;
+        if (!t) return ComputeLockPoint(); // fallback
+
+        Vector3 xz = new Vector3(t.position.x, t.position.y + 2f, t.position.z);
+        var mask = aimMask;
+        if (Physics.Raycast(xz, Vector3.down, out var hit, aimRayMaxDistance, mask, QueryTriggerInteraction.Ignore))
+            return hit.point;
+
+        // fallback plane
+        if (fallbackGroundY)
+            return new Vector3(xz.x, fallbackGroundY.position.y, xz.z);
+
+        return ComputeLockPoint();
+    }
     // Ray from muzzle forward to ground/wall; fallback to a plane if no hit.
     private Vector3 ComputeLockPoint()
     {
@@ -420,10 +519,28 @@ public class SnakeChargeAttackAction : AttackActionBase
             lr.SetPosition(1, end);
         }
     }
+    private bool IsTargetGrounded(Transform target)
+    {
+        if (!target) return false;
+
+        // Try CharacterController first if present (cheap).
+        var cc = target.GetComponent<CharacterController>();
+        if (cc != null) return cc.isGrounded;
+
+        // Fallback: spherecast down a short distance against ground layers.
+        Vector3 start = target.position + Vector3.up * 0.05f;
+        float dist = Mathf.Max(0.05f, groundedProbeDistance);
+        float r = Mathf.Max(0.01f, groundedProbeRadius);
+        var mask = groundedMask.value != 0 ? groundedMask : aimMask; // default to aimMask if not set
+
+        return Physics.SphereCast(start, r, Vector3.down, out _, dist, mask, QueryTriggerInteraction.Ignore);
+    }
+
 
     // ===== Common cleanup =====
 
-    private void CleanupAndFinish()
+    // smoother default cleanup (no speed snap)
+    private void CleanupAndFinish(bool chainRelocate)
     {
         LaserOffAllClients();
 
@@ -431,11 +548,28 @@ public class SnakeChargeAttackAction : AttackActionBase
         {
             controller.ClearAttackOverride();
             controller.SetSteeringSuppression(noSlither: false, noRoll: false);
-            //controller.ResetSpeedTarget();
-            controller.SetSpeedImmediate(controller.OriginalSpeed);
+
+            // Smoothly blend back to cruise instead of snapping
+            controller.ResetSpeedTarget();
         }
 
-        SnakeUtilityAi.active = true;
+        SnakeUtilityAi.active = true;   // re-enable AI
         IsBusy = false;
+
+        if (chainRelocate) TriggerRelocate();
+    }
+
+    //goes back to idle
+    private void TriggerRelocate()
+    {
+        if (!chainRelocateOnFinish || !controller) return;
+
+        var relocate = GetComponent<SnakeRelocateAction>();
+        var ctx = controller.BuildContext();
+
+        if (relocate && relocate.CanExecute(ctx))
+            relocate.ExecuteMove(ctx);// Use the action so it manages IsBusy/cooldown/idle sequence for you.
+        else
+            controller.StartCoroutine(controller.CoRelocateToWaypointAndIdle());
     }
 }

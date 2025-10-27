@@ -96,7 +96,6 @@ public class PlayerCameraShake : NetworkBehaviour
 
     public void Shake(Strength strength)
     {
-        Debug.Log("test");
         var p = strength switch
         {
             Strength.Small => small,

@@ -25,7 +25,7 @@ public class SnakeHomingMissile : NetworkBehaviour, IDamageable
 
         public int hitPoints;                // default 1
     }
-
+    
     [Header("missiles setting")]
     [SerializeField] private float initialSpeed = 10f;
     [SerializeField] private float speedDecayDuration;   // duration to lerp from initialSpeed to targetSpeed

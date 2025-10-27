@@ -1,10 +1,8 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System;
+
 /// Simple, fast chain solver for snake/segmented creatures.
-/// Head is driven externally (AI). Each segment is constrained to:
-/// 1) Stay on a sphere of radius 'linkLength' around its parent,
-/// 2) Not exceed 'maxBendAngleDeg' relative to the parent's direction.
 [ExecuteAlways]
 public class ChainSnakeSolver : MonoBehaviour
 {
@@ -14,21 +12,18 @@ public class ChainSnakeSolver : MonoBehaviour
     public bool autoBuildFromChildren = true;
     public bool autoLengthsFromInitial = true;
 
-    public bool perLinkLengths = false; //true = each link has its own radius value according to constraintLength, false = use same value for all
-    //for this prototype keep false;
-
-    [SerializeField] private List<float> constraintLength = new List<float>();//pre set length for each point radius
-
-    [Min(0.001f)] public float defaultLinkLength = 1f; //length from 1 link to another/ the constraint redius
+    public bool perLinkLengths = false;
+    [SerializeField] private List<float> constraintLength = new List<float>();
+    [Min(0.001f)] public float defaultLinkLength = 1f;
 
     [Header("Bend Constraint")]
-    [Range(0f, 179f)] public float maxBendAngleDeg = 45f;//max bend per joint
+    [Range(0f, 179f)] public float maxBendAngleDeg = 45f;
 
     [Header("Smoothing")]
     [Tooltip("Extra pass count to stabilize and stiffen. 0 or 1 is often enough.")]
-    [Range(0, 4)] public int solverIterations = 1; //extra passes to stiffen/stabilize the chain
+    [Range(0, 4)] public int solverIterations = 1;
     [Tooltip("Position smoothing toward the solved target for each segment.")]
-    [Range(0f, 1f)] public float followLerp = 0.4f; //how strongly each segment moves toward its constraint target (smoothing).
+    [Range(0f, 1f)] public float followLerp = 0.4f;
 
     [Header("Orientation")]
     public bool alignRotation = true;
@@ -40,28 +35,119 @@ public class ChainSnakeSolver : MonoBehaviour
     public bool drawLinks = true;
     public Color linkColor = new Color(0f, 0.8f, 1f, 0.8f);
 
-    // Runtime
-    private float[] linkLengths; // desired distance from parent to segment i (sphere radius)
-    private Vector3 _lastHeadPos;//cached last-frame head position (to infer motion direction).
-    private bool _initd = false;
+    // ========================== Idle Wiggle (optional) ==========================
+    [Header("Idle Wiggle (optional)")]
+    [Tooltip("Enable a sinusoidal side-to-side body wave (head stays driven by controller).")]
+    public bool idleWiggleEnabled = false;
 
-    private void OnEnable()
+    [Tooltip("Max angular deflection per link (degrees). Tail is scaled by Tail Multiplier.")]
+    public float idleWiggleAmplitudeDeg = 12f;
+
+    [Tooltip("Oscillation frequency (Hz).")]
+    public float idleWiggleFrequency = 0.9f;
+
+    [Tooltip("How much phase offset between links (degrees per segment).")]
+    public float idleWigglePhasePerLinkDeg = 20f;
+
+    [Tooltip("Amplify wiggle toward the tail. 1 = no taper, >1 = stronger tail.")]
+    public float idleWiggleTailMultiplier = 1.4f;
+
+    [Tooltip("Axis for wiggle rotation. If zero vector, uses Vector3.up.")]
+    public Vector3 idleWiggleUpAxis = Vector3.up;
+
+    [Space(6)]
+    [Tooltip("When wiggle turns on, briefly pull all links straight behind the head first.")]
+    public bool wiggleStraightenOnEnable = true;
+
+    [Tooltip("Seconds to keep straightening active after enabling wiggle.")]
+    [Min(0f)] public float wiggleStraightenTime = 0.25f;
+
+    [Tooltip("Seconds to ramp wiggle amplitude 0 -> target when enabled (and back to 0 when disabled).")]
+    [Min(0f)] public float wiggleRampTime = 0.35f;
+
+    [Tooltip("Exponent >1 means the tail straightens more than the front.")]
+    [Min(0f)] public float wiggleStraightenTailPower = 1.5f;
+
+    [Tooltip("Randomize the starting wiggle phase when enabling to avoid sameness.")]
+    public bool randomizePhaseOnEnable = true;
+    [Header("Tail Stiffness After Straighten")]
+    [Tooltip("Persistent straightening at the tail after the initial straighten window (only while idle wiggle is on). 0 = off.")]
+    [Range(0f, 1f)] public float postStraightenTailBias = 0.18f;
+
+    [Tooltip("Concentrates the post-straighten bias toward the tail. >1 = mostly tail, 1 = linear.")]
+    [Min(0f)] public float postStraightenTailPower = 1.8f;
+
+    [Tooltip("Seconds to crossfade from the strong idle-start straighten into the softer post tail bias.")]
+    [Min(0f)] public float postStraightenLerpTime = 0.5f;
+
+    // Inspector
+    [Header("Straighten Triggers")]
+    [Tooltip("Skip the straighten-on-enable the very first time wiggle turns on (e.g., on spawn).")]
+    public bool skipStraightenOnFirstEnable = true;
+
+    // Runtime
+    private bool _hasEverEnabledWiggle = false;  // tracks first runtime enable
+    private bool _straightenArmed = false;       // only true when a real straighten window is scheduled
+    // Runtime
+    private float[] linkLengths;
+    private Vector3 _lastHeadPos;
+    private bool _initd = false;
+    private float _wiggleTime = 0f;
+    private float _wiggleStraightenStart = 0f;   // when the lerp started
+    private float _phaseOffsetRad = 0f;          // random phase so it looks different each time
+
+    // New runtime controls
+    private float _wiggleAmpScale = 0f;          // 0..1 amplitude envelope
+    private float _wiggleStraightenUntil = 0f;   // world time until which we force straightening
+    private bool _prevWiggleEnabled = false;
+
+    // ===== Public API for controller =====
+    /// <summary>Enable/disable body wiggle and set amplitude/frequency.</summary>
+    public void SetIdleWiggle(bool on, float amplitudeDeg, float frequencyHz)
     {
-        InitIfNeeded();
+        bool turningOn = on && !_prevWiggleEnabled;
+        _prevWiggleEnabled = on;
+
+        idleWiggleEnabled = on;
+        idleWiggleAmplitudeDeg = Mathf.Max(0f, amplitudeDeg);
+        idleWiggleFrequency = Mathf.Max(0f, frequencyHz);
+
+        if (turningOn)
+        {
+            _wiggleTime = 0f;
+            _wiggleAmpScale = 0f; // ramp up in SolveChain
+
+            bool shouldSkipThisEnable = skipStraightenOnFirstEnable && !_hasEverEnabledWiggle;
+            bool shouldStraightenNow = wiggleStraightenOnEnable && wiggleStraightenTime > 0f && !shouldSkipThisEnable;
+
+            if (shouldStraightenNow)
+            {
+                // Arm a real straighten window
+                _wiggleStraightenUntil = Time.time + wiggleStraightenTime;
+                _straightenArmed = true;
+            }
+            else
+            {
+                // No window armed; also prevents post-bias from activating
+                _straightenArmed = false;
+                _wiggleStraightenUntil = -1f;
+            }
+        }
+        else if (!on)
+        {
+            // Leaving idle — disarm any pending window/post bias
+            _straightenArmed = false;
+        }
+
+        _hasEverEnabledWiggle = _hasEverEnabledWiggle || turningOn;
     }
 
-    /*private void Reset()
-    {
-        autoBuildFromChildren = true;
-        autoLengthsFromInitial = true;
-        perLinkLengths = true;
-        defaultLinkLength = 1f;
-        maxBendAngleDeg = 45f;
-        solverIterations = 1;
-        followLerp = 0.4f;
-        alignRotation = true;
-        upHint = Vector3.up;
-    }*/
+
+    /// <summary>Alias for compatibility.</summary>
+    public void EnableIdleWiggle(bool on, float amplitudeDeg, float frequencyHz)
+        => SetIdleWiggle(on, amplitudeDeg, frequencyHz);
+
+    private void OnEnable() { InitIfNeeded(); }
 
     private void OnValidate()
     {
@@ -74,13 +160,12 @@ public class ChainSnakeSolver : MonoBehaviour
     private void InitIfNeeded()
     {
         if (autoBuildFromChildren)
-        {
             BuildSegmentsFromChildren();
-        }
 
         if (segments == null) return;
 
-        if (linkLengths == null || linkLengths.Length != (segments?.Length ?? 0)) linkLengths = new float[segments.Length];
+        if (linkLengths == null || linkLengths.Length != (segments?.Length ?? 0))
+            linkLengths = new float[segments.Length];
 
         if (!_initd || autoLengthsFromInitial)
             MeasureLinkLengths();
@@ -90,12 +175,19 @@ public class ChainSnakeSolver : MonoBehaviour
 
         _initd = true;
         _lastHeadPos = head ? head.position : transform.position;
+
+        // Reset wiggle runtime state
+        _wiggleTime = 0f;
+        _wiggleAmpScale = idleWiggleEnabled ? 1f : 0f;
+        _prevWiggleEnabled = idleWiggleEnabled;
+        _wiggleStraightenUntil = 0f;
+        _hasEverEnabledWiggle = false;
+        _straightenArmed = false;
+        _wiggleStraightenUntil = -1f; // sentinel: no window armed
     }
 
     private void BuildSegmentsFromChildren()
     {
-        // Build from children EXCLUDING head if head is a child of this object.
-        // If head is not a child, we just take all children as segments.
         List<Transform> list = new List<Transform>();
         for (int i = 0; i < transform.childCount; i++)
         {
@@ -106,26 +198,16 @@ public class ChainSnakeSolver : MonoBehaviour
         segments = list.ToArray();
     }
 
-    /// <summary>
-    /// create length of in between each segment
-    /// </summary>
     private void MeasureLinkLengths()
     {
         if (segments == null || head == null) return;
 
         if (perLinkLengths)
         {
-            // link 0: from head to segments[0], etc…
             if (linkLengths.Length == constraintLength.Count)
             {
                 for (int i = 0; i < segments.Length; i++)
-                {
-                    /*Transform a = (i == 0) ? head : segments[i - 1];
-                    Transform b = segments[i];
-                    float d = (a && b) ? Vector3.Distance(a.position, b.position) : defaultLinkLength;
-                    linkLengths[i] = Mathf.Max(0.001f, d);*/
-                    linkLengths[i] = constraintLength[i];
-                }
+                    linkLengths[i] = Mathf.Max(0.001f, constraintLength[i]);
             }
         }
         else
@@ -138,90 +220,175 @@ public class ChainSnakeSolver : MonoBehaviour
     private void LateUpdate()
     {
         if (!Application.isPlaying)
-        {
-            // In edit mode, still run to preview chains
             SolveChain(Time.deltaTime);
-        }
     }
 
     private void Update()
     {
         if (Application.isPlaying)
-        {
             SolveChain(Time.deltaTime);
-        }
     }
 
     private void SolveChain(float dt)
     {
-        //InitIfNeeded();
         if (head == null || segments == null || segments.Length == 0) return;
 
-        // Use head "direction" hint from motion if available
+        // === Wiggle clock and amplitude ramp ===
+        _wiggleTime += Mathf.Max(0f, dt);
+
+        if (idleWiggleEnabled)
+        {
+            float step = (wiggleRampTime <= 0f) ? 1f : dt / Mathf.Max(0.0001f, wiggleRampTime);
+            _wiggleAmpScale = Mathf.Clamp01(_wiggleAmpScale + step);
+        }
+        else
+        {
+            float step = (wiggleRampTime <= 0f) ? 1f : dt / Mathf.Max(0.0001f, wiggleRampTime);
+            _wiggleAmpScale = Mathf.Clamp01(_wiggleAmpScale - step);
+        }
+
+        // Base direction the chain wants to extend along: opposite the head forward
         Vector3 headDir = -head.forward;
-        //Vector3 headVel = (head.position - _lastHeadPos) / Mathf.Max(0.0001f, dt);
-        //if (headVel.sqrMagnitude > 0.0001f) headDir = headVel.normalized;
         if (headDir.sqrMagnitude < 0.001f) headDir = transform.forward;
-        /*Choose an initial “parent direction” for the first joint:
 
-        Start with -head.forward so the chain tends to trail behind the head’s facing.
+        int n = segments.Length;
 
-        If the head is actually moving, use its velocity direction instead (more natural).
+        // Stable phase offset so each enable looks a bit different.
+        float phaseOffsetRad = 0f;
+        if (wiggleStraightenOnEnable && wiggleStraightenTime > 0f)
+        {
+            // Hash the "until" timestamp into [0, 2PI)
+            float s = Mathf.Sin(_wiggleStraightenUntil * 12.9898f) * 43758.5453f;
+            float frac = s - Mathf.Floor(s);
+            phaseOffsetRad = frac * (Mathf.PI * 2f);
+        }
 
-        If that’s degenerate, fall back to the root’s forward.
-         */
+        float basePhase = phaseOffsetRad + _wiggleTime * Mathf.PI * 2f * Mathf.Max(0f, idleWiggleFrequency);
+        float perLinkPhaseRad = idleWigglePhasePerLinkDeg * Mathf.Deg2Rad;
+        float ampDeg = Mathf.Max(0f, idleWiggleAmplitudeDeg) * _wiggleAmpScale; // ramped
+        Vector3 wiggleAxis = (idleWiggleUpAxis.sqrMagnitude > 1e-6f ? idleWiggleUpAxis.normalized : Vector3.up);
+
+        // --- Windowed straighten (only while idle just began) ---
+        bool inStraightenWindow = _straightenArmed&& wiggleStraightenOnEnable&& wiggleStraightenTime > 0f&& Time.time < _wiggleStraightenUntil;
+
+        float straightenBlendGlobal = 0f;
+        if (inStraightenWindow)
+        {
+            float start = _wiggleStraightenUntil - wiggleStraightenTime;
+            float u = Mathf.InverseLerp(start, _wiggleStraightenUntil, Time.time); // 0..1 inside the window
+            straightenBlendGlobal = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(u));    // ease-in
+        }
+
+        // --- Post window: gently bias the tail, but crossfade to it over time (no snap) ---
+        bool idleActive = idleWiggleEnabled || _wiggleAmpScale > 0f;
+        bool afterWindow = _straightenArmed && idleActive && !inStraightenWindow;
+
+        // Ramp 0->1 after the window finishes, over postStraightenLerpTime
+        float postPhaseT = 0f;
+        if (afterWindow)
+        {
+            if (postStraightenLerpTime <= 0f) postPhaseT = 1f;
+            else
+            {
+                float t = (Time.time - _wiggleStraightenUntil) / Mathf.Max(0.0001f, postStraightenLerpTime);
+                postPhaseT = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
+            }
+        }
+
+        // Target post bias values (user knobs)
+        float postBiasTarget = Mathf.Clamp01(postStraightenTailBias);
+        float postPowerTarget = Mathf.Max(0f, postStraightenTailPower);
+
+        // Crossfade power from 1 (linear along the body) to the user's tail-focused power
+        float effectivePostPower = Mathf.Lerp(1f, postPowerTarget, postPhaseT);
+
+        // Strength of the post bias also grows from 0 to the user's target
+        float postBiasStrength = postBiasTarget * postPhaseT;
+
+        const float windowTailPower = 1.5f; // 1.2–2.0 feels nice for the initial straighten
 
         for (int it = 0; it < Mathf.Max(1, solverIterations); it++)
         {
             Vector3 prevPos = head.position;
             Vector3 prevDir = headDir;
 
-            for (int i = 0; i < segments.Length; i++)
+            for (int i = 0; i < n; i++)
             {
                 Transform seg = segments[i];
                 if (!seg) continue;
 
                 float L = linkLengths[i];
 
-                // Current raw direction from parent to this segment
+                // Direction from parent to this segment (raw desire)
                 Vector3 rawDir = (seg.position - prevPos);
-                if (rawDir.sqrMagnitude < 1e-6f) rawDir = prevDir; // fallback
-                rawDir.Normalize();//direction vector 
+                if (rawDir.sqrMagnitude < 1e-6f) rawDir = prevDir;
+                rawDir.Normalize();
 
-                // Clamp bend angle
+                // Constrain how sharply we can bend away from the parent direction
                 float maxRad = maxBendAngleDeg * Mathf.Deg2Rad;
-                Vector3 clampedDir;
-                if (prevDir.sqrMagnitude < 1e-6f)
-                {
-                    clampedDir = rawDir;
-                }
+                Vector3 constrained = (prevDir.sqrMagnitude < 1e-6f)
+                    ? rawDir
+                    : Vector3.RotateTowards(prevDir, rawDir, maxRad, 0f);
+
+                // Tail weighting 0..1 (head->tail)
+                float tailT = (n > 1) ? ((i + 1) / (float)n) : 1f;
+
+                // What the window strength would be at the *end* of the window for this link
+                float windowEndBlend = Mathf.Pow(tailT, windowTailPower);
+
+                // Active window blend (ramps in from 0..1 only while in window)
+                float windowBlendNow = straightenBlendGlobal * windowEndBlend;
+
+                // Post blend grows in after the window, both in strength and tail focus
+                float postBlendNow = postBiasStrength * Mathf.Pow(tailT, effectivePostPower);
+
+                // Final blend per link:
+                // - If in the window: use the window blend.
+                // - After the window: crossfade smoothly from the window's final strength to the post blend.
+                float blend;
+                if (inStraightenWindow)
+                    blend = windowBlendNow;
+                else if (afterWindow)
+                    blend = Mathf.Lerp(windowEndBlend, postBlendNow, postPhaseT);
                 else
+                    blend = 0f; // roaming/attacking or wiggle off
+
+                Vector3 baseDir = (blend > 0f)
+                    ? Vector3.Slerp(constrained, prevDir, Mathf.Clamp01(blend))
+                    : constrained;
+
+                // Overlay the idle wiggle (kept alive during the straighten/post blends)
+                if (ampDeg > 0f)
                 {
-                    // If rawDir deviates more than max, clamp towards prevDir
-                    clampedDir = Vector3.RotateTowards(prevDir, rawDir, maxRad, 0f);
+                    float ampThisDeg = Mathf.Lerp(ampDeg, ampDeg * Mathf.Max(1f, idleWiggleTailMultiplier), tailT);
+                    float phase = basePhase + perLinkPhaseRad * i;
+                    float angDeg = ampThisDeg * Mathf.Sin(phase);
+                    baseDir = Quaternion.AngleAxis(angDeg, wiggleAxis) * baseDir;
                 }
 
-                // Enforce constant length (sphere around parent => on circumference)
-                Vector3 targetPos = prevPos + clampedDir * L;
+                // Constant length
+                Vector3 targetPos = prevPos + baseDir * L;
 
-                // Smooth toward target to reduce jitter
+                // Smooth toward target
                 seg.position = Vector3.Lerp(seg.position, targetPos, followLerp);
 
                 if (alignRotation)
                 {
-                    // Orient along the chain direction
                     Vector3 up = upHint.sqrMagnitude > 0.001f ? upHint : Vector3.up;
-                    seg.rotation = Quaternion.LookRotation(-clampedDir, up);
+                    seg.rotation = Quaternion.LookRotation(-baseDir, up);
                 }
 
-                // Next parent for the next link
                 prevPos = seg.position;
-                prevDir = clampedDir;
+                prevDir = baseDir;
             }
         }
 
         _lastHeadPos = head.position;
     }
+
+
+
+
 
     private void OnDrawGizmosSelected()
     {
