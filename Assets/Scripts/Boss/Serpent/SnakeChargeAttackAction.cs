@@ -524,8 +524,8 @@ public class SnakeChargeAttackAction : AttackActionBase
         if (!target) return false;
 
         // Try CharacterController first if present (cheap).
-        var cc = target.GetComponent<CharacterController>();
-        if (cc != null) return cc.isGrounded;
+        //var cc = target.GetComponent<CharacterController>();
+        //if (cc != null) return cc.isGrounded;
 
         // Fallback: spherecast down a short distance against ground layers.
         Vector3 start = target.position + Vector3.up * 0.05f;

@@ -68,6 +68,24 @@ public class ChainSnakeSolver : MonoBehaviour
     [Tooltip("Exponent >1 means the tail straightens more than the front.")]
     [Min(0f)] public float wiggleStraightenTailPower = 1.5f;
 
+    [Header("Idle Wiggle Vertical Damping")]
+    [Range(0f, 0.5f)] public float wiggleMaxRisePerLinkFrac = 0.02f; // fraction of link length
+    [Tooltip("If true, upward motion from wag is damped (scaled) and can be clamped below the head. Do not touch this, its not in use just for checking")]
+    public bool wiggleDampVertical = false;
+
+    [Tooltip("Scale for the UPWARD component of each link's wag direction (0 = no upward, 1 = full upward).")]
+    [Range(0f, 1f)] public float wiggleUpwardYScale = 0.25f;
+
+    [Tooltip("Clamp each link's world Y to <= head.y + this while wiggle is on. <0 = no clamp. 0 = never above head.")]
+    public float wiggleMaxRiseAboveHead = 0f;
+
+    // --- Charge-only vertical guard (active only when an action asks for it) ---
+    [NonSerialized] private bool _wagClampActive = false;      // on only during charge
+    [NonSerialized] private float _wagClampUpScale = 0.2f;      // 0..1 scales upward component
+    [NonSerialized] private float _wagClampRiseFrac = 0.02f;    // allowance as fraction of link length
+    [NonSerialized] private float[] _wagClampBaselineY = null;  // per-link baseline Y captured on begin
+
+
     [Tooltip("Randomize the starting wiggle phase when enabling to avoid sameness.")]
     public bool randomizePhaseOnEnable = true;
     [Header("Tail Stiffness After Straighten")]
@@ -93,6 +111,7 @@ public class ChainSnakeSolver : MonoBehaviour
     private Vector3 _lastHeadPos;
     private bool _initd = false;
     private float _wiggleTime = 0f;
+    private bool _dampVertical = false;
     private float _wiggleStraightenStart = 0f;   // when the lerp started
     private float _phaseOffsetRad = 0f;          // random phase so it looks different each time
 
@@ -102,9 +121,35 @@ public class ChainSnakeSolver : MonoBehaviour
     private bool _prevWiggleEnabled = false;
 
     // ===== Public API for controller =====
-    /// <summary>Enable/disable body wiggle and set amplitude/frequency.</summary>
-    public void SetIdleWiggle(bool on, float amplitudeDeg, float frequencyHz)
+
+    public void BeginChargeWagClamp(float perLinkRiseAllowanceFrac, float upwardYScale)
     {
+        _wagClampActive = true;
+        _wagClampRiseFrac = Mathf.Max(0f, perLinkRiseAllowanceFrac);
+        _wagClampUpScale = Mathf.Clamp01(upwardYScale);
+
+        // allocate baselines
+        if (_wagClampBaselineY == null || _wagClampBaselineY.Length != (segments?.Length ?? 0))
+            _wagClampBaselineY = new float[segments?.Length ?? 0];
+
+        // capture current per-link Y as the ceiling baseline
+        if (segments != null)
+            for (int i = 0; i < segments.Length; i++)
+                _wagClampBaselineY[i] = segments[i] ? segments[i].position.y : 0f;
+    }
+
+    public void EndChargeWagClamp()
+    {
+        _wagClampActive = false;
+    }
+
+    /// <summary>Enable/disable body wiggle and set amplitude/frequency and vertical damping.</summary> 
+    // NEW: canonical API with vertical damping
+
+    public void SetIdleWiggle(bool on, float amplitudeDeg, float frequencyHz, bool dampVertical)
+    {
+        _dampVertical = dampVertical;
+        wiggleDampVertical = dampVertical;
         bool turningOn = on && !_prevWiggleEnabled;
         _prevWiggleEnabled = on;
 
@@ -122,25 +167,27 @@ public class ChainSnakeSolver : MonoBehaviour
 
             if (shouldStraightenNow)
             {
-                // Arm a real straighten window
                 _wiggleStraightenUntil = Time.time + wiggleStraightenTime;
                 _straightenArmed = true;
             }
             else
             {
-                // No window armed; also prevents post-bias from activating
                 _straightenArmed = false;
                 _wiggleStraightenUntil = -1f;
             }
         }
         else if (!on)
         {
-            // Leaving idle — disarm any pending window/post bias
             _straightenArmed = false;
         }
 
         _hasEverEnabledWiggle = _hasEverEnabledWiggle || turningOn;
     }
+
+    // Legacy alias (keeps old callers working)
+    public void SetIdleWiggle(bool on, float amplitudeDeg, float frequencyHz)
+        => SetIdleWiggle(on, amplitudeDeg, frequencyHz, false);
+
 
 
     /// <summary>Alias for compatibility.</summary>
@@ -184,6 +231,7 @@ public class ChainSnakeSolver : MonoBehaviour
         _hasEverEnabledWiggle = false;
         _straightenArmed = false;
         _wiggleStraightenUntil = -1f; // sentinel: no window armed
+        //_wagClampBaselineY
     }
 
     private void BuildSegmentsFromChildren()
@@ -366,8 +414,47 @@ public class ChainSnakeSolver : MonoBehaviour
                     baseDir = Quaternion.AngleAxis(angDeg, wiggleAxis) * baseDir;
                 }
 
+                // Charge-only: damp upward wag while clamp is active
+                if (_wagClampActive && baseDir.y > 0f)
+                {
+                    // project to horizontal and blend back a little vertical for a clean left/right wag
+                    Vector3 flat = Vector3.ProjectOnPlane(baseDir, Vector3.up);
+                    if (flat.sqrMagnitude > 1e-6f) flat.Normalize(); else flat = prevDir;
+
+                    baseDir = Vector3.Slerp(flat, baseDir, _wagClampUpScale);
+                    baseDir.Normalize();
+                }
+
                 // Constant length
                 Vector3 targetPos = prevPos + baseDir * L;
+
+                // Charge-only: do not let this link rise above its baseline Y by more than a small allowance
+                if (_wagClampActive && _wagClampBaselineY != null && i < _wagClampBaselineY.Length)
+                {
+                    float maxY = _wagClampBaselineY[i] + _wagClampRiseFrac * L; // allowance is per-link
+                    if (targetPos.y > maxY) targetPos.y = maxY;
+                }
+
+                /*if (_wagClampActive)
+                {
+                    // Keep each link from climbing above its parent more than a small allowance
+                    if (_dampVertical)
+                    {
+                        // Allowance relative to link length (0 = no rise at all)
+                        // change link length while wiggling; tweak to taste
+                        float maxRise = Mathf.Max(0f, wiggleMaxRisePerLinkFrac) * L;
+                        if (targetPos.y > prevPos.y + maxRise)
+                            targetPos.y = prevPos.y + maxRise;
+                    }
+
+                    // --- NEW: Optional clamp to prevent links going above the head ---
+                    if (_dampVertical && wiggleMaxRiseAboveHead >= 0f)
+                    {
+                        float maxY = head.position.y + wiggleMaxRiseAboveHead;
+                        if (targetPos.y > maxY) targetPos.y = maxY;
+                    }
+                }*/
+                
 
                 // Smooth toward target
                 seg.position = Vector3.Lerp(seg.position, targetPos, followLerp);
@@ -386,7 +473,12 @@ public class ChainSnakeSolver : MonoBehaviour
         _lastHeadPos = head.position;
     }
 
+    /// <summary>Enable/disable body wiggle and set amplitude/frequency and vertical damping.</summary>
+    
 
+    /// <summary>Alias for compatibility (with damping).</summary>
+    public void EnableIdleWiggle(bool on, float amplitudeDeg, float frequencyHz, bool dampVertical)
+        => SetIdleWiggle(on, amplitudeDeg, frequencyHz, dampVertical);
 
 
 

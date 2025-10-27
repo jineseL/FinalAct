@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -82,6 +81,7 @@ public class SnakeBossController : NetworkBehaviour
     [SerializeField] private bool bodyWiggleEnabled = true;
     [SerializeField] private float bodyWiggleAmplitude = 1.2f;
     [SerializeField] private float bodyWiggleFrequency = 0.8f;
+    [SerializeField] private bool wiggleDampVertical = true;
 
     // ========================== Dynamic Min-Y Clamp ==========================
     [Header("Dynamic Min-Y Clamp")]
@@ -511,7 +511,7 @@ public class SnakeBossController : NetworkBehaviour
     // Optional hook into ChainSnakeSolver (safe if not present)
     private void TryEnableBodyWiggle(bool on)
     {
-        if (!chainSolver || !bodyWiggleEnabled) return;
+        /*if (!chainSolver || !bodyWiggleEnabled) return;
 
         var t = chainSolver.GetType();
 
@@ -529,7 +529,10 @@ public class SnakeBossController : NetworkBehaviour
         {
             m.Invoke(chainSolver, new object[] { on, bodyWiggleAmplitude, bodyWiggleFrequency });
         }
-        // If nothing matches, no error—head wobble still provides some motion.
+        // If nothing matches, no error—head wobble still provides some motion.*/
+
+        if (!chainSolver || !bodyWiggleEnabled) return;
+        chainSolver.SetIdleWiggle(on, bodyWiggleAmplitude, bodyWiggleFrequency, wiggleDampVertical);
     }
 
     // ========================== Relocate + Idle Sequence (simple) ==========================
@@ -862,6 +865,22 @@ public class SnakeBossController : NetworkBehaviour
     }
 
     // Helpers
+
+    public void SetIdleWiggle(bool on, float amplitudeDeg, float frequencyHz, bool dampVertical = false)
+    {
+        if (!chainSolver) return;
+        chainSolver.SetIdleWiggle(on, amplitudeDeg, frequencyHz, dampVertical);
+    }
+    public void BeginChargeWagClamp(float perLinkRiseAllowanceFrac, float upwardYScale)
+    {
+        if (!chainSolver) return;
+        chainSolver.BeginChargeWagClamp(perLinkRiseAllowanceFrac, upwardYScale);
+    }
+    public void EndChargeWagClamp()
+    {
+        if (!chainSolver) return;
+        chainSolver.EndChargeWagClamp();
+    }
     public Transform Head => head;
     public float GroundMinY => chaseMinAltitudeMarker ? chaseMinAltitudeMarker.position.y : float.NegativeInfinity;
 
