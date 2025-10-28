@@ -287,7 +287,6 @@ public class SnakeChargeAttackAction : AttackActionBase
                 // If we hit ground we already zeroed speed; now jump to climb speed for a crisp recovery
                 controller.SetSpeedImmediate(returnClimbSpeed);
                 controller.SetAttackOverride(climbTo, returnTimeout, verticalY: true);
-
                 float retDeadline = Time.time + returnTimeout + 0.25f;
                 while (Time.time < retDeadline)
                 {

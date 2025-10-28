@@ -2153,8 +2153,8 @@ MonoBehaviour:
   playerCamera: {fileID: 609460848942889315}
   playerCmCam: {fileID: 0}
   audioListener: {fileID: 3457790173109492858}
-  xSensitivity: 30
-  ySensitivity: 30
+  xSensitivity: 0.2
+  ySensitivity: 0.2
 --- !u!114 &9110666006173063790
 MonoBehaviour:
   m_ObjectHideFlags: 0

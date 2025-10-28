@@ -94,13 +94,16 @@ public class PlayerMotor : MonoBehaviour
         // Ignore new external forces while locked
         if (!canExternalForceApplied) return;
         if (IsExternalForceLocked) return;
-
+        // Cancel dash on impact
+        if (isDashing) CancelDash();
         externalForce = Vector3.ClampMagnitude(externalForce + forceVelocity, maxExternalSpeed);
     }
 
     // use this if you ever need to override the lock for a special case
     public void ApplyExternalForceOverride(Vector3 forceVelocity)
     {
+        // cancels dash 
+        if (isDashing) CancelDash();
         externalForce = Vector3.ClampMagnitude(externalForce + forceVelocity, maxExternalSpeed);
     }
     public void LockExternalForces(float duration)
@@ -126,8 +129,48 @@ public class PlayerMotor : MonoBehaviour
         // do not snap, just set the target to zero; it will ease back using persistentAccel
         persistentTargetVel = Vector3.zero;
     }
-
     public void ProcessMove(Vector2 input)
+    {
+        if (isDashing) return;
+
+        lastInput = input;
+
+        Vector3 posBefore = transform.position;
+
+        // build desired planar vel in world space
+        Vector3 moveDir = transform.TransformDirection(new Vector3(input.x, 0f, input.y));
+        float appliedSpeed = speed * moveFactor;
+
+        // gravity
+        playerVelocity.y += gravity * Time.deltaTime;
+        if (isGrounded && playerVelocity.y < 0f) playerVelocity.y = -2f;
+
+        // ease persistent velocity
+        persistentVel = Vector3.MoveTowards(persistentVel, persistentTargetVel, persistentAccel * Time.deltaTime);
+
+        // external force decays
+        externalForce = Vector3.Lerp(externalForce, Vector3.zero, 4f * Time.deltaTime);
+
+        // single move
+        Vector3 totalVel =
+            (moveDir * appliedSpeed) +
+            persistentVel +
+            externalForce +
+            new Vector3(0f, playerVelocity.y, 0f);
+
+        controller.Move(totalVel * Time.deltaTime);
+
+        // grounded reset AFTER move
+        isGrounded = controller.isGrounded;
+        if (isGrounded && playerVelocity.y < 0f) { playerVelocity.y = -2f; jumpCount = 0; }
+
+        // footsteps
+        Vector3 diff = transform.position - posBefore;
+        diff.y = 0f;
+        FootstepTick(diff.magnitude);
+    }
+    //old processmove
+    /*public void ProcessMove(Vector2 input)
     {
         if (isDashing) return;
 
@@ -167,7 +210,7 @@ public class PlayerMotor : MonoBehaviour
         float horizontalDelta = diff.magnitude;
 
         FootstepTick(horizontalDelta);
-    }
+    }*/
 
     public void Jump()
     {
@@ -212,7 +255,11 @@ public class PlayerMotor : MonoBehaviour
             isDashing = false;
         }
     }
-
+    public void CancelDash()
+    {
+        isDashing = false;
+        dashTimer = 0f;
+    }
     private void TriggerDashVFX()
     {
         // todo dash effect

@@ -76,6 +76,10 @@ public class SnakeBossController : NetworkBehaviour
     private Vector3 idleWobbleTgtOffset;
     private float idleWobbleNextChange = 0f;
 
+    //for mouth barrage action
+    [SerializeField] private bool hardUprightLock = false;
+    public void SetHardUprightLock(bool on) { if (IsServer) hardUprightLock = on; }
+
     // ========================== Optional body wiggle hook ==========================
     [Header("Body Wiggle (optional - via ChainSnakeSolver)")]
     [SerializeField] private bool bodyWiggleEnabled = true;
@@ -329,7 +333,9 @@ public class SnakeBossController : NetworkBehaviour
 
         float yawDelta = steerYaw + slitherYawDelta;
         ApplyLocalRotation(yawDelta, steerPitch, rollStep);
-
+        // <<< add this line near the end of Server_MoveHead() >>>
+        if (hardUprightLock && head)
+            head.rotation = Quaternion.LookRotation(head.forward, Vector3.up);
         // Roam maintenance when not idling/relocating/chasing/overriding
         if (targetPos != Vector3.zero && !IsChasing && !AttackOverrideActive && !inRelocateSequence && !inIdleHover)
         {
@@ -539,6 +545,7 @@ public class SnakeBossController : NetworkBehaviour
     public IEnumerator CoRelocateToWaypointAndIdle()
     {
         inRelocateSequence = true;
+        if(inIdleHover)
         ExitIdleHover(); // just in case
 
         Transform choice = PickRandomWaypointAvoidingLast();
@@ -865,6 +872,22 @@ public class SnakeBossController : NetworkBehaviour
     }
 
     // Helpers
+
+    // Locks/unlocks roll leveling. Equivalent to SetSteeringSuppression(noSlither, on)
+    // but clearer at call sites when all you care about is roll.
+    public void SetRollLock(bool on)
+    {
+        if (!IsServer) return;
+        suppressRoll = on;
+    }
+
+    // Immediately remove any existing roll so the head is upright
+    // (keeps current forward; just re-derives rotation with world up).
+    public void SnapHeadRollUprightNow()
+    {
+        if (!IsServer || !head) return;
+        head.rotation = Quaternion.LookRotation(head.forward, Vector3.up);
+    }
 
     public void SetIdleWiggle(bool on, float amplitudeDeg, float frequencyHz, bool dampVertical = false)
     {

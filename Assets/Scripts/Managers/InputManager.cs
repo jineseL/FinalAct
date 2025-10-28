@@ -52,13 +52,12 @@ public class InputManager : NetworkBehaviour
         onFoot.Esc.performed += ctx => AppQuit.Quit();
         onFoot.Enable();
     }
-    private void FixedUpdate()
+    private void Update()
     {
         if (!IsOwner) return;
         //Debug.Log(onFoot.Movement.ReadValue<Vector2>());
         //tell playermotor to move using value from onFoot Vector 2
         motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
-
     }
     private void LateUpdate()
     {
@@ -67,13 +66,11 @@ public class InputManager : NetworkBehaviour
     }
     private void OnEnable()
     {
-        if (IsOwner)
-            onFoot.Enable();
+        if (IsOwner && playerInput != null) onFoot.Enable();
     }
     private void OnDisable()
     {
-        if (IsOwner)
-            onFoot.Disable();
+        if (IsOwner && playerInput != null) onFoot.Disable();
     }
     /*private void QuitGame() //todo fix this shit
     {

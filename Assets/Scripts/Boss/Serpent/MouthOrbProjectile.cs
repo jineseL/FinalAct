@@ -83,21 +83,19 @@ public class MouthOrbProjectile : NetworkBehaviour
 
         if (charging)
         {
-            // stick to mouth while charging
+            // Always stick to mouth until launch.
             if (followMouth)
             {
                 transform.position = followMouth.position;
                 transform.rotation = followMouth.rotation;
             }
 
-            if (Time.time >= chargeUntil)
-            {
-                charging = false; // wait for ServerLaunch to be called by the action
-            }
+            // NOTE: Do NOT auto-clear 'charging' when time passes.
+            // We keep following until ServerLaunch() is invoked.
+            // if (Time.time >= chargeUntil) charging = false;   <-- REMOVE this line
         }
         else if (launched)
         {
-            // life timer guard in case nothing was hit
             if (Time.time >= dieAt)
                 ExplodeAt(transform.position);
         }

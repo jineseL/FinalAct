@@ -165,6 +165,7 @@ public class PlayerHealth : NetworkBehaviour
         }
     }
 
+
     // ======= NEW: Damage + knockback variants =======
 
     /// <summary>
@@ -318,8 +319,15 @@ public class PlayerHealth : NetworkBehaviour
     [ClientRpc]
     private void HitFeedbackClientRpc(ClientRpcParams p = default)
     {
-        // camera shake / flash / sound on victim client only
+        // Victim-only on this client (thanks to targeted RPC)
+        var shaker = GetComponent<PlayerCameraShake>();
+        if (shaker) shaker.Shake(PlayerCameraShake.Strength.Medium);
+
+        // Optional: add a brief UI flash if you have one (e.g., a hurt overlay)
+        var hud = GetComponentInChildren<PlayerHUD>(true);
+        // if (hud) hud.PlayHurtFlash(); // keep as a future hook if you add it
     }
+
 
     private void Die()
     {
@@ -338,13 +346,21 @@ public class PlayerHealth : NetworkBehaviour
         if (hasTeammate)
         {
             EnterDowned();
-            DieText.SetActive(true);
+            // Target the owner only
+            var ownerId = GetComponent<NetworkObject>()?.OwnerClientId ?? 0;
+            SetDieTextClientRpc(true, new ClientRpcParams{Send = new ClientRpcSendParams { TargetClientIds = new[] { ownerId } }});
         }
         else
         {
             ServerFakeRespawn(fakeDeathHpPct);
         }
     }
+    [ClientRpc]
+    private void SetDieTextClientRpc(bool on, ClientRpcParams p = default)
+    {
+        if (DieText) DieText.SetActive(on);
+    }
+
     // ======= DOWNED / REVIVE =======
 
     private void EnterDowned()

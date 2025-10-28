@@ -34,9 +34,14 @@ public class PlayerLook: NetworkBehaviour
                 if (listener) listener.enabled = false;
             }
         }
-        // Local owner: lock cursor for FPS
-        //uncomment if not testing
-       // SetFpsCursor(true);
+        yaw = transform.eulerAngles.y;
+        pitch = cameraPivot.transform.localEulerAngles.x;
+        if (pitch > 180f) pitch -= 360f; // map to [-180,180] for clamping
+         // Local owner: lock cursor for FPS
+
+         //uncomment if not testing
+         // SetFpsCursor(true);
+
     }
     public override void OnNetworkDespawn()
     {
@@ -50,8 +55,8 @@ public class PlayerLook: NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        float mouseX = (input.x*Time.deltaTime) * xSensitivity;
-        float mouseY = (input.y *Time.deltaTime)* ySensitivity;
+        float mouseX = (input.x) * xSensitivity;
+        float mouseY = (input.y )* ySensitivity;
 
         // Pitch (look up/down)
         pitch = Mathf.Clamp(pitch - mouseY, -80f, 80f);

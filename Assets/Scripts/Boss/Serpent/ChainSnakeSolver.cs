@@ -78,6 +78,11 @@ public class ChainSnakeSolver : MonoBehaviour
 
     [Tooltip("Clamp each link's world Y to <= head.y + this while wiggle is on. <0 = no clamp. 0 = never above head.")]
     public float wiggleMaxRiseAboveHead = 0f;
+    [Header("Charge Wag Axis (used only while clamped)")]
+    public Vector3 chargeWagAxis = Vector3.up;   // exposed in inspector if you prefer
+
+    // runtime copy to read in SolveChain (we keep a private to avoid races if you animate it)
+    [NonSerialized] private Vector3 _chargeWagAxis = Vector3.up;
 
     // --- Charge-only vertical guard (active only when an action asks for it) ---
     [NonSerialized] private bool _wagClampActive = false;      // on only during charge
@@ -103,6 +108,7 @@ public class ChainSnakeSolver : MonoBehaviour
     [Tooltip("Skip the straighten-on-enable the very first time wiggle turns on (e.g., on spawn).")]
     public bool skipStraightenOnFirstEnable = true;
 
+
     // Runtime
     private bool _hasEverEnabledWiggle = false;  // tracks first runtime enable
     private bool _straightenArmed = false;       // only true when a real straighten window is scheduled
@@ -119,6 +125,7 @@ public class ChainSnakeSolver : MonoBehaviour
     private float _wiggleAmpScale = 0f;          // 0..1 amplitude envelope
     private float _wiggleStraightenUntil = 0f;   // world time until which we force straightening
     private bool _prevWiggleEnabled = false;
+    [NonSerialized] private float _savedFollow = -1f;
 
     // ===== Public API for controller =====
 
@@ -127,6 +134,7 @@ public class ChainSnakeSolver : MonoBehaviour
         _wagClampActive = true;
         _wagClampRiseFrac = Mathf.Max(0f, perLinkRiseAllowanceFrac);
         _wagClampUpScale = Mathf.Clamp01(upwardYScale);
+        _chargeWagAxis = (chargeWagAxis.sqrMagnitude > 1e-6f) ? chargeWagAxis : Vector3.up;
 
         // allocate baselines
         if (_wagClampBaselineY == null || _wagClampBaselineY.Length != (segments?.Length ?? 0))
@@ -314,7 +322,9 @@ public class ChainSnakeSolver : MonoBehaviour
         float basePhase = phaseOffsetRad + _wiggleTime * Mathf.PI * 2f * Mathf.Max(0f, idleWiggleFrequency);
         float perLinkPhaseRad = idleWigglePhasePerLinkDeg * Mathf.Deg2Rad;
         float ampDeg = Mathf.Max(0f, idleWiggleAmplitudeDeg) * _wiggleAmpScale; // ramped
-        Vector3 wiggleAxis = (idleWiggleUpAxis.sqrMagnitude > 1e-6f ? idleWiggleUpAxis.normalized : Vector3.up);
+        //Vector3 wiggleAxis = (idleWiggleUpAxis.sqrMagnitude > 1e-6f ? idleWiggleUpAxis.normalized : Vector3.up);
+        Vector3 axisSrc = _wagClampActive? ((_chargeWagAxis.sqrMagnitude > 1e-6f) ? _chargeWagAxis : Vector3.up): ((idleWiggleUpAxis.sqrMagnitude > 1e-6f) ? idleWiggleUpAxis : Vector3.up);
+        Vector3 wiggleAxis = axisSrc.normalized;
 
         // --- Windowed straighten (only while idle just began) ---
         bool inStraightenWindow = _straightenArmed&& wiggleStraightenOnEnable&& wiggleStraightenTime > 0f&& Time.time < _wiggleStraightenUntil;
@@ -473,8 +483,22 @@ public class ChainSnakeSolver : MonoBehaviour
         _lastHeadPos = head.position;
     }
 
+    public void PushFollowTight(float value)
+    {
+        if (_savedFollow < 0f) _savedFollow = followLerp;
+        followLerp = Mathf.Clamp01(value);
+    }
+
+    public void PopFollowTight()
+    {
+        if (_savedFollow >= 0f)
+        {
+            followLerp = _savedFollow;
+            _savedFollow = -1f;
+        }
+    }
     /// <summary>Enable/disable body wiggle and set amplitude/frequency and vertical damping.</summary>
-    
+
 
     /// <summary>Alias for compatibility (with damping).</summary>
     public void EnableIdleWiggle(bool on, float amplitudeDeg, float frequencyHz, bool dampVertical)

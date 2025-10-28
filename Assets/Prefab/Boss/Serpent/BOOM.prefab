@@ -231,10 +231,10 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 2048
   playerLayer: 8
-  explosionRadius: 9.5
+  explosionRadius: 11
   explosionDamage: 40
-  explosionKnockback: 30
-  explosionUpBias: 0.6
+  explosionKnockback: 40
+  explosionUpBias: 0.8
   explosionVfx: {fileID: 4593184484909914552, guid: f5cb710bb553b854788e5f5b67f5cbba, type: 3}
   showExplosionGizmo: 1
   gizmoWireColor: {r: 1, g: 0.35, b: 0.05, a: 1}
